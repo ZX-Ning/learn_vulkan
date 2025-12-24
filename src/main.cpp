@@ -1,19 +1,20 @@
+// c++ std libs
 #include <cassert>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <print>
 #include <stdexcept>
 #include <vector>
 
-// vulkan headers
-#include <volk.h>
-
+// vulkan-hpp headers
+#include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_raii.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
-#define GLFW_INCLUDE_VULKAN  // REQUIRED only for GLFW CreateWindowSurface.
+// glfw
 #include <GLFW/glfw3.h>
 
 constexpr uint32_t WIDTH = 800;
