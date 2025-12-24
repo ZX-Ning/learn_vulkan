@@ -1,32 +1,32 @@
 {
-  "configurations": [
-    {
-      "type": "xmake",
-      "request": "launch",
-      "name": "Launch",
-      "target": "cpp_xmake",
-      "cwd": "${workspaceFolder}",
-      "stopAtEntry": false
-    },
-    {
-      "type": "lldb",
-      "request": "launch",
-      "preLaunchTask": "Xmake: Build",
-      "name": "lldb-windows",
-      "program": "${workspaceFolder}/build/windows/x64/debug/learn_vulkan.exe",
-      "args": [],
-      "cwd": "${workspaceFolder}",
-      "terminal": "integrated"
-    },
-    {
-      "type": "lldb",
-      "request": "launch",
-      "preLaunchTask": "Xmake: Build",
-      "name": "lldb-linux",
-      "program": "${workspaceFolder}/build/linux/x86_64/debug/learn_vulkan",
-      "args": [],
-      "cwd": "${workspaceFolder}",
-      "terminal": "integrated"
-    },
-  ]
+    "configurations": [
+        {
+            "type": "xmake",
+            "request": "launch",
+            "name": "Launch",
+            "target": "cpp_xmake",
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "preLaunchTask": "Xmake: Build",
+            "name": "lldb-windows",
+            "program": "${workspaceFolder}/build/windows/x64/debug/learn_vulkan.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "terminal": "integrated"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "preLaunchTask": "Xmake: Build",
+            "name": "lldb-linux",
+            "program": "${workspaceFolder}/build/linux/x86_64/debug/learn_vulkan",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "terminal": "integrated"
+        },
+    ]
 }

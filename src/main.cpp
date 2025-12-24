@@ -1,10 +1,12 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <ostream>
 #include <stdexcept>
 #include <vector>
 
@@ -64,7 +66,10 @@ private:
     bool framebufferResized = false;
 
     std::vector<const char*> requiredDeviceExtension = {
-        vk::KHRSwapchainExtensionName, vk::KHRSpirv14ExtensionName, vk::KHRSynchronization2ExtensionName, vk::KHRCreateRenderpass2ExtensionName
+        vk::KHRSwapchainExtensionName,
+        vk::KHRSpirv14ExtensionName,
+        vk::KHRSynchronization2ExtensionName,
+        vk::KHRCreateRenderpass2ExtensionName
     };
 
     void initWindow() {
@@ -73,16 +78,17 @@ private:
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-        window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+        window = glfwCreateWindow(WIDTH, HEIGHT, "Learn Vulkan", nullptr, nullptr);
         glfwSetWindowUserPointer(window, this);
-        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-    }
-
-    static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-        auto app = reinterpret_cast<HelloTriangleApplication*>(
-            glfwGetWindowUserPointer(window)
+        glfwSetFramebufferSizeCallback(
+            window,
+            [](GLFWwindow* window, int width, int height) {
+                auto app = reinterpret_cast<HelloTriangleApplication*>(
+                    glfwGetWindowUserPointer(window)
+                );
+                app->framebufferResized = true;
+            }
         );
-        app->framebufferResized = true;
     }
 
     void initVulkan() {
@@ -115,8 +121,8 @@ private:
 
     void cleanup() {
         glfwDestroyWindow(window);
-
-        glfwTerminate();
+        // glfwTerminate();
+        // call terminal will cause segfault on linux when cleanup swapchain?!
     }
 
     void recreateSwapChain() {
@@ -153,13 +159,15 @@ private:
         // implementation.
         auto layerProperties = context.enumerateInstanceLayerProperties();
         for (auto const& requiredLayer : requiredLayers) {
-            if (std::ranges::none_of(
-                    layerProperties,
-                    [requiredLayer](auto const& layerProperty) {
-                        return strcmp(layerProperty.layerName, requiredLayer) ==
-                               0;
-                    }
-                )) {
+            bool layerFound = false;
+            for (auto const& layerProperty : layerProperties) {
+                if (strcmp(layerProperty.layerName, requiredLayer) == 0) {
+                    layerFound = true;
+                    break;
+                }
+            }
+
+            if (!layerFound) {
                 throw std::runtime_error("Required layer not supported: " + std::string(requiredLayer));
             }
         }
@@ -172,12 +180,15 @@ private:
         auto extensionProperties =
             context.enumerateInstanceExtensionProperties();
         for (auto const& requiredExtension : requiredExtensions) {
-            if (std::ranges::none_of(
-                    extensionProperties,
-                    [requiredExtension](auto const& extensionProperty) {
-                        return strcmp(extensionProperty.extensionName, requiredExtension) == 0;
-                    }
-                )) {
+            bool extensionFound = false;
+            for (auto const& extensionProperty : extensionProperties) {
+                if (strcmp(extensionProperty.extensionName, requiredExtension) == 0) {
+                    extensionFound = true;
+                    break;
+                }
+            }
+
+            if (!extensionFound) {
                 throw std::runtime_error("Required extension not supported: " + std::string(requiredExtension));
             }
         }
@@ -230,39 +241,39 @@ private:
     void pickPhysicalDevice() {
         std::vector<vk::raii::PhysicalDevice> devices =
             instance.enumeratePhysicalDevices();
-        const auto devIter = std::ranges::find_if(devices, [&](auto const& device) {
+        vk::raii::PhysicalDevice* selectedDevice = nullptr;
+        for (auto& device : devices) {
             // Check if the device supports the Vulkan 1.3 API version
             bool supportsVulkan1_3 =
                 device.getProperties().apiVersion >= VK_API_VERSION_1_3;
 
             // Check if any of the queue families support graphics operations
             auto queueFamilies = device.getQueueFamilyProperties();
-            bool supportsGraphics =
-                std::ranges::any_of(queueFamilies, [](auto const& qfp) {
-                    return !!(qfp.queueFlags & vk::QueueFlagBits::eGraphics);
-                });
+            bool supportsGraphics = false;
+            for (auto const& qfp : queueFamilies) {
+                if (qfp.queueFlags & vk::QueueFlagBits::eGraphics) {
+                    supportsGraphics = true;
+                    break;
+                }
+            }
 
             // Check if all required device extensions are available
             auto availableDeviceExtensions =
                 device.enumerateDeviceExtensionProperties();
-            bool supportsAllRequiredExtensions = std::ranges::all_of(
-                requiredDeviceExtension,
-                [&availableDeviceExtensions](
-                    auto const& requiredDeviceExtension
-                ) {
-                    return std::ranges::any_of(
-                        availableDeviceExtensions,
-                        [requiredDeviceExtension](
-                            auto const& availableDeviceExtension
-                        ) {
-                            return strcmp(
-                                       availableDeviceExtension.extensionName,
-                                       requiredDeviceExtension
-                                   ) == 0;
-                        }
-                    );
+            bool supportsAllRequiredExtensions = true;
+            for (auto const& requiredDeviceExtension : requiredDeviceExtension) {
+                bool extensionFound = false;
+                for (auto const& availableDeviceExtension : availableDeviceExtensions) {
+                    if (strcmp(availableDeviceExtension.extensionName, requiredDeviceExtension) == 0) {
+                        extensionFound = true;
+                        break;
+                    }
                 }
-            );
+                if (!extensionFound) {
+                    supportsAllRequiredExtensions = false;
+                    break;
+                }
+            }
 
             auto features = device.template getFeatures2<
                 vk::PhysicalDeviceFeatures2,
@@ -281,11 +292,15 @@ private:
                         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>()
                     .extendedDynamicState;
 
-            return supportsVulkan1_3 && supportsGraphics &&
-                   supportsAllRequiredExtensions && supportsRequiredFeatures;
-        });
-        if (devIter != devices.end()) {
-            physicalDevice = *devIter;
+            if (supportsVulkan1_3 && supportsGraphics &&
+                supportsAllRequiredExtensions && supportsRequiredFeatures) {
+                selectedDevice = &device;
+                break;
+            }
+        }
+        if (selectedDevice != nullptr) {
+            physicalDevice = *selectedDevice;
+            std::printf("Device: %s\n", physicalDevice.getProperties().deviceName.data());
         }
         else {
             throw std::runtime_error("failed to find a suitable GPU!");
@@ -316,15 +331,16 @@ private:
         }
 
         // query for Vulkan 1.3 features
-        vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
+        vk::StructureChain<
+            vk::PhysicalDeviceFeatures2,
+            vk::PhysicalDeviceVulkan11Features,
+            vk::PhysicalDeviceVulkan13Features,
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
             featureChain = {
-                {},  // vk::PhysicalDeviceFeatures2
-                {.shaderDrawParameters =
-                     true},  // vk::PhysicalDeviceVulkan11Features
-                {.synchronization2 = true,
-                 .dynamicRendering = true},  // vk::PhysicalDeviceVulkan13Features
-                {.extendedDynamicState =
-                     true}  // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+                vk::PhysicalDeviceFeatures2{},
+                vk::PhysicalDeviceVulkan11Features{.shaderDrawParameters = true},
+                vk::PhysicalDeviceVulkan13Features{.synchronization2 = true, .dynamicRendering = true},
+                vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT{.extendedDynamicState = true}
             };
 
         // create a Device
@@ -506,7 +522,10 @@ private:
         // Before starting rendering, transition the swapchain image to
         // COLOR_ATTACHMENT_OPTIMAL
         transition_image_layout(
-            imageIndex, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal, {},  // srcAccessMask (no need to wait for previous operations)
+            imageIndex,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            {},  // srcAccessMask (no need to wait for previous operations)
             vk::AccessFlagBits2::eColorAttachmentWrite,
             vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             vk::PipelineStageFlagBits2::eColorAttachmentOutput
@@ -539,11 +558,13 @@ private:
         commandBuffer.endRendering();
         // After rendering, transition the swapchain image to PRESENT_SRC
         transition_image_layout(
-            imageIndex, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
-            vk::AccessFlagBits2::eColorAttachmentWrite,          // srcAccessMask
-            {},                                                  // dstAccessMask
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,  // srcStage
-            vk::PipelineStageFlagBits2::eBottomOfPipe            // dstStage
+            imageIndex,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::ePresentSrcKHR,
+            vk::AccessFlagBits2::eColorAttachmentWrite,
+            {},
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::PipelineStageFlagBits2::eBottomOfPipe
         );
         commandBuffer.end();
     }
@@ -695,30 +716,24 @@ private:
         const std::vector<vk::SurfaceFormatKHR>& availableFormats
     ) {
         assert(!availableFormats.empty());
-        const auto formatIt =
-            std::ranges::find_if(
-                availableFormats,
-                [](const auto& format) {
-                    return format.format == vk::Format::eB8G8R8A8Srgb &&
-                           format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
-                }
-            );
-        return formatIt != availableFormats.end() ? *formatIt
-                                                  : availableFormats[0];
+        for (const auto& format : availableFormats) {
+            if (format.format == vk::Format::eB8G8R8A8Srgb &&
+                format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+                return format;
+            }
+        }
+        return availableFormats[0];
     }
 
     static vk::PresentModeKHR chooseSwapPresentMode(
         const std::vector<vk::PresentModeKHR>& availablePresentModes
     ) {
-        assert(std::ranges::any_of(availablePresentModes, [](auto presentMode) {
-            return presentMode == vk::PresentModeKHR::eFifo;
-        }));
-        return std::ranges::any_of(availablePresentModes, [](const vk::PresentModeKHR value) {
-            return vk::PresentModeKHR::eMailbox ==
-                   value;
-        })
-                 ? vk::PresentModeKHR::eMailbox
-                 : vk::PresentModeKHR::eFifo;
+        for (const auto& presentMode : availablePresentModes) {
+            if (presentMode == vk::PresentModeKHR::eMailbox) {
+                return vk::PresentModeKHR::eMailbox;
+            }
+        }
+        return vk::PresentModeKHR::eFifo;
     }
 
     vk::Extent2D chooseSwapExtent(
@@ -730,7 +745,9 @@ private:
         int width, height;
         glfwGetFramebufferSize(window, &width, &height);
 
-        return {std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width), std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)};
+        return {
+            std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width), std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
+        };
     }
 
     std::vector<const char*> getRequiredExtensions() {
