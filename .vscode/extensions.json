@@ -1,0 +1,9 @@
+{
+    "recommendations": [
+        "llvm-vs-code-extensions.vscode-clangd",
+        "tboox.xmake-vscode",
+        "vadimcn.vscode-lldb",
+        "shader-slang.slang-language-extension",
+        "xaver.clang-format"
+    ]
+}
