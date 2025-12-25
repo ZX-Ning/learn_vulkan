@@ -21,6 +21,7 @@
 // project
 #include "WindowApp.hpp"
 #include "utils.hpp"
+#include "vertex.hpp"
 
 namespace {
 
@@ -435,11 +436,21 @@ vk::raii::Pipeline createGraphicsPipeline(
         vertShaderStageInfo, fragShaderStageInfo
     };
 
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+    auto bindingDescription = SimpleVertex::bindingDescription();
+    auto attributeDescriptions = SimpleVertex::attributeDescriptions();
+
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
+        .vertexBindingDescriptionCount = 1,
+        .pVertexBindingDescriptions = &bindingDescription,
+        .vertexAttributeDescriptionCount = attributeDescriptions.size(),
+        .pVertexAttributeDescriptions = attributeDescriptions.data()
+    };
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
         .topology = vk::PrimitiveTopology::eTriangleList
     };
-    vk::PipelineViewportStateCreateInfo viewportState{.viewportCount = 1, .scissorCount = 1};
+    vk::PipelineViewportStateCreateInfo viewportState{
+        .viewportCount = 1, .scissorCount = 1
+    };
 
     vk::PipelineRasterizationStateCreateInfo rasterizer{
         .depthClampEnable = vk::False,
@@ -558,6 +569,58 @@ void createSyncObjects(
     }
 }
 
+uint32_t findMemoryType(
+    const vk::raii::PhysicalDevice& physicalDevice,
+    uint32_t typeFilter,
+    vk::MemoryPropertyFlags properties
+) {
+    vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("failed to find suitable memory type!");
+}
+
+VulkanApp::SimpleBuffer createVertexBuffer(
+    const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::Device& device
+) {
+    const auto& vertices = TRAINGLE;
+    // create vertex buffer
+    vk::BufferCreateInfo bufferInfo{
+        .size = sizeof(vertices[0]) * vertices.size(),
+        .usage = vk::BufferUsageFlagBits::eVertexBuffer,
+        .sharingMode = vk::SharingMode::eExclusive
+    };
+    vk::raii::Buffer vertexBuffer(device, bufferInfo);
+
+    // create buffer memory
+    vk::MemoryRequirements memRequirements = vertexBuffer.getMemoryRequirements();
+    vk::MemoryAllocateInfo memoryAllocateInfo{
+        .allocationSize = memRequirements.size,
+        .memoryTypeIndex = findMemoryType(
+            physicalDevice,
+            memRequirements.memoryTypeBits,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+        )
+    };
+    vk::raii::DeviceMemory vertexBufferMemory(device, memoryAllocateInfo);
+    vertexBuffer.bindMemory(*vertexBufferMemory, 0);
+    return {std::move(vertexBuffer), std::move(vertexBufferMemory)};
+}
+
+void writeVertexBuffer(const VulkanApp::SimpleBuffer& vertBuffer) {
+    const auto& vertices = TRAINGLE;
+
+    uint32_t size = sizeof(vertices[0]) * vertices.size();
+
+    void* data = vertBuffer.memory.mapMemory(0, size);
+    memcpy(data, vertices.data(), size);
+    vertBuffer.memory.unmapMemory();
+}
 }  // namespace
 
 void VulkanApp::onResize() {
@@ -584,10 +647,11 @@ void VulkanApp::init() {
         physicalDevice, device, *surface, {size.width, size.height}
     );
 
+    vertexBuffer = createVertexBuffer(physicalDevice, device);
+    writeVertexBuffer(vertexBuffer);
+
     graphicsPipeline = createGraphicsPipeline(device, swapChain.surfaceFormat);
-
     commandBuffers = createCommandBuffers(device, commandPool, queueFamilyIndex);
-
     createSyncObjects(syncObjects, device, swapChain);
 }
 
@@ -689,6 +753,7 @@ void VulkanApp::drawFrame() {
         commandBuffer.setScissor(
             0, vk::Rect2D(vk::Offset2D(0, 0), swapChain.extent)
         );
+        commandBuffer.bindVertexBuffers(0, *vertexBuffer.buffer, {0});
         commandBuffer.draw(3, 1, 0, 0);
         commandBuffer.endRendering();
         // After rendering, transition the swapchain image to PRESENT_SRC

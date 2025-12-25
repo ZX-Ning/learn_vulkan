@@ -3,8 +3,8 @@
 #include "VulkanApp.hpp"
 #include "WindowApp.hpp"
 
-constexpr uint32_t WIDTH = 1200;
-constexpr uint32_t HEIGHT = 800;
+constexpr uint32_t WIDTH = 800;
+constexpr uint32_t HEIGHT = 600;
 const char* TITTLE = "Learn Vulkan";
 
 int main() {

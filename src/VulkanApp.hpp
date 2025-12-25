@@ -42,9 +42,12 @@ public:
         std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
         std::vector<vk::raii::Fence> inFlightFences;
     };
+    struct SimpleBuffer {
+        vk::raii::Buffer buffer = nullptr;
+        vk::raii::DeviceMemory memory = nullptr;
+    };
 
 private:
-    // GLFWwindow* window = nullptr;
     std::unique_ptr<WindowApp> windowApp;
     vk::raii::Context context;
     vk::raii::Instance instance = nullptr;
@@ -60,6 +63,8 @@ private:
     SwapChain swapChain;
     uint32_t frameIndex = 0;
     SyncObjects syncObjects;
+    SimpleBuffer vertexBuffer;
+
     bool framebufferResized = false;
     void init();
     void recreateSwapChain();
