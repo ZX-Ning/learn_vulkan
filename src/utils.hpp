@@ -1,6 +1,10 @@
 #ifndef UTILS_HPP
 #define UTILS_HPP
 
+#include <GLFW/glfw3.h>
+
+#include <array>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -38,5 +42,44 @@ struct Size2D {
         };
     }
 };
+
+struct RGBAColor : public std::array<float, 4> {
+    float* getRaw() {
+        return this->data();
+    }
+
+    RGBAColor(float r, float g, float b, float a)
+        : std::array<float, 4>{r, g, b, a} {}
+
+    RGBAColor() : RGBAColor(0.f, 0.f, 0.f, 1.f) {}
+
+    static float srgbToLinear(float color) {
+        if (color <= 0.04045f) {
+            return color / 12.92f;
+        }
+        else {
+            return std::pow((color + 0.055f) / 1.055f, 2.4f);
+        }
+    }
+
+    RGBAColor srgbToLinear() {
+        return {
+            srgbToLinear((*this)[0]),
+            srgbToLinear((*this)[1]),
+            srgbToLinear((*this)[2]),
+            (*this)[3]
+        };
+    }
+};
+
+class GLFWwindow;
+struct GLFWwindowDeleter {
+    void operator()(GLFWwindow* window) {
+        if (window != nullptr) {
+            glfwDestroyWindow(window);
+        }
+    }
+};
+typedef std::unique_ptr<GLFWwindow, GLFWwindowDeleter> GLFWwindowWrapper;
 
 #endif  // UTILS_HPP

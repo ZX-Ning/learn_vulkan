@@ -9,7 +9,7 @@ const char* TITTLE = "Learn Vulkan";
 
 int main() {
     try {
-        VulkanApp app(std::make_unique<WindowApp>(WIDTH, HEIGHT, TITTLE));
+        VulkanApp app(WindowApp(WIDTH, HEIGHT, TITTLE));
         app.run();
     }
     catch (const std::exception& e) {

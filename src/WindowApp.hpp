@@ -2,8 +2,9 @@
 #define WINDOWAPP_HPP
 
 // c++ std
+#include <GLFW/glfw3.h>
+
 #include <functional>
-#include <memory>
 #include <string_view>
 
 #include "utils.hpp"
@@ -17,19 +18,21 @@ class Instance;
 
 class WindowApp {
 private:
-    GLFWwindow* window;
+    // unique_ptr make WindowApp moveable but not copyable
+    GLFWwindowWrapper window;
     static void resizeCallBackHelper(GLFWwindow* window, int width, int height);
 
 public:
     WindowApp(int width, int height, std::string_view tittle);
+
     std::function<void(int width, int height)> resizeCallBack;
     std::function<void()> drawFrameCallBack;
     std::function<void()> cleanupCallBack;
     void run();
+    Size2D<int> getWindowSize();
     Size2D<int> getFrameSize();
-    std::unique_ptr<vk::raii::SurfaceKHR> createSurface(const vk::raii::Instance& instance);
-
-    DISABLE_COPY(WindowApp)
+    vk::raii::SurfaceKHR createSurface(const vk::raii::Instance& instance);
+    float getScale();
 };
 
 #endif  // WINDOWAPP_HPP
