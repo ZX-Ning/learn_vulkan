@@ -2,6 +2,7 @@
 #define VULKANAPP_HPP
 
 // c++ std libs
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -32,21 +33,31 @@ class WindowApp;
 
 class VulkanApp {
 public:
+    struct SurfaceImages {
+        vk::Image image;
+        vk::raii::ImageView imageView = nullptr;
+        // vk::raii::ImageView imageViewNorm;
+        vk::raii::Semaphore renderComplete = nullptr;
+    };
     struct SwapChain {
         vk::raii::SwapchainKHR swapChain = nullptr;
-        std::vector<vk::Image> images;
         vk::SurfaceFormatKHR surfaceFormat;
         vk::Extent2D extent;
-        std::vector<vk::raii::ImageView> imageViews;
-    };
-    struct SyncObjects {
-        std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
-        std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
-        std::vector<vk::raii::Fence> inFlightFences;
+        std::vector<SurfaceImages> images;
+        void reset() {
+            swapChain = nullptr;
+            extent = {0, 0},
+            images.clear();
+        }
     };
     struct SimpleBuffer {
         vk::raii::Buffer buffer = nullptr;
         vk::raii::DeviceMemory memory = nullptr;
+    };
+    struct Frame {
+        vk::raii::CommandBuffer cmdBuffer = nullptr;
+        vk::raii::Semaphore presentComplete = nullptr;
+        vk::raii::Fence fences = nullptr;
     };
     struct AppState {
         RGBAColor clearColor{0.f, 0.f, 0.f, 1.f};
@@ -65,10 +76,10 @@ private:
     vk::raii::Queue queue = nullptr;
     vk::raii::Pipeline graphicsPipeline = nullptr;
     vk::raii::CommandPool commandPool = nullptr;
-    std::vector<vk::raii::CommandBuffer> commandBuffers;
+    std::array<Frame, MAX_FRAMES_IN_FLIGHT> frames;
     SwapChain swapChain;
     uint32_t frameIndex = 0;
-    SyncObjects syncObjects;
+
     SimpleBuffer vertexBuffer;
     AppState state;
 

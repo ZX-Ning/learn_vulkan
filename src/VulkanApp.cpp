@@ -2,7 +2,6 @@
 
 // std c++
 #include <cassert>
-#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <print>
@@ -12,23 +11,21 @@
 #include <vector>
 
 // vulkan
-#include <vulkan/vulkan_core.h>
-
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
 #include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_raii.hpp>
 #include <vulkan/vulkan_structs.hpp>
 
+// imgui
+#include <backends/imgui_impl_vulkan.h>
+#include <imgui.h>
+
 // project
 #include "WindowApp.hpp"
 #include "backends/imgui_impl_glfw.h"
 #include "utils.hpp"
 #include "vertex.hpp"
-
-// imgui
-#include <backends/imgui_impl_vulkan.h>
-#include <imgui.h>
 
 namespace {
 
@@ -43,7 +40,15 @@ vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
             return format;
         }
     }
-    throw std::runtime_error("Do not support this format yet");
+    for (const auto& format : availableFormats) {
+        if ((format.format == vk::Format::eB8G8R8A8Unorm ||
+             format.format == vk::Format::eR8G8B8A8Unorm) &&
+            format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+            std::println("Can not found Srgb Format, using Unorm.");
+            return format;
+        }
+    }
+    throw std::runtime_error("Format not supported yet");
     // return availableFormats[0];
 }
 
@@ -64,7 +69,7 @@ vk::PresentModeKHR chooseSwapPresentMode(
     //         return vk::PresentModeKHR::eMailbox;
     //     }
     // }
-    return vk::PresentModeKHR::eFifo;
+    return vk::PresentModeKHR::eImmediate;
 }
 
 std::vector<const char*> getRequiredExtensions() {
@@ -365,18 +370,21 @@ VulkanApp::SwapChain createSwapChain(
             .layerCount = 1
         }
     };
-    std::vector<vk::raii::ImageView> swapChainImageViews;
+    std::vector<VulkanApp::SurfaceImages> views;
     for (auto& image : swapChainImages) {
         imageViewCreateInfo.image = image;
-        swapChainImageViews.emplace_back(device, imageViewCreateInfo);
+        views.emplace_back(
+            image,
+            vk::raii::ImageView{device, imageViewCreateInfo},
+            vk::raii::Semaphore{device, vk::SemaphoreCreateInfo{}}
+        );
     }
 
     return {
         .swapChain = std::move(swapChain),
-        .images = std::move(swapChainImages),
         .surfaceFormat = swapChainSurfaceFormat,
         .extent = swapChainExtent,
-        .imageViews = std::move(swapChainImageViews),
+        .images = std::move(views),
     };
 }
 
@@ -533,10 +541,13 @@ vk::raii::Pipeline createGraphicsPipeline(
     };
 }
 
-// update pool
-vk::raii::CommandBuffers createCommandBuffers(
-    const vk::raii::Device& device,
+/*
+ * update: pool, frame
+ */
+void createFrames(
     vk::raii::CommandPool& pool,
+    std::span<VulkanApp::Frame, MAX_FRAMES_IN_FLIGHT> frames,
+    const vk::raii::Device& device,
     uint32_t queueFamilyIndex
 ) {
     if (pool == nullptr) {
@@ -551,37 +562,13 @@ vk::raii::CommandBuffers createCommandBuffers(
         .level = vk::CommandBufferLevel::ePrimary,
         .commandBufferCount = MAX_FRAMES_IN_FLIGHT
     };
-    return {device, allocInfo};
-}
-
-/*
- * update: syncObjects
- */
-void createSyncObjects(
-    VulkanApp::SyncObjects& syncObjects,
-    const vk::raii::Device& device,
-    const VulkanApp::SwapChain& swapChain
-) {
-    assert(
-        syncObjects.presentCompleteSemaphores.empty() &&
-        syncObjects.renderFinishedSemaphores.empty() &&
-        syncObjects.inFlightFences.empty()
-    );
-
-    for (size_t i = 0; i < swapChain.images.size(); i++) {
-        syncObjects.renderFinishedSemaphores.emplace_back(
-            device, vk::SemaphoreCreateInfo{}
-        );
-    }
-
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        syncObjects.presentCompleteSemaphores.emplace_back(
-            device, vk::SemaphoreCreateInfo{}
-        );
-        syncObjects.inFlightFences.emplace_back(
-            device,
-            vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled}
-        );
+    vk::raii::CommandBuffers commandbufs{device, allocInfo};
+    for (int i = 0; i < frames.size(); i++) {
+        frames[i] = VulkanApp::Frame{
+            .cmdBuffer = std::move(commandbufs[i]),
+            .presentComplete = {device, vk::SemaphoreCreateInfo{}},
+            .fences = {device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled}}
+        };
     }
 }
 
@@ -621,7 +608,8 @@ VulkanApp::SimpleBuffer createVertexBuffer(
         .memoryTypeIndex = findMemoryType(
             physicalDevice,
             memRequirements.memoryTypeBits,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+            vk::MemoryPropertyFlagBits::eHostVisible |
+                vk::MemoryPropertyFlagBits::eHostCoherent
         )
     };
     vk::raii::DeviceMemory vertexBufferMemory(device, memoryAllocateInfo);
@@ -654,6 +642,39 @@ void drawImgui(vk::raii::CommandBuffer& buffer, VulkanApp::AppState& state) {
     ImDrawData* draw_data = ImGui::GetDrawData();
     ImGui_ImplVulkan_RenderDrawData(draw_data, *buffer);
 }
+
+vk::Format formatToSrgb(vk::Format format) {
+    switch (format) {
+        case vk::Format::eB8G8R8A8Srgb:
+        case vk::Format::eB8G8R8A8Unorm: {
+            return vk::Format::eB8G8R8A8Srgb;
+        }
+        case vk::Format::eR8G8B8A8Srgb:
+        case vk::Format::eR8G8B8A8Unorm: {
+            return vk::Format::eR8G8B8A8Srgb;
+        }
+        default: {
+            throw std::runtime_error("Format not supported yet.");
+        }
+    }
+}
+
+vk::Format formatToUnorm(vk::Format format) {
+    switch (format) {
+        case vk::Format::eB8G8R8A8Srgb:
+        case vk::Format::eB8G8R8A8Unorm: {
+            return vk::Format::eB8G8R8A8Unorm;
+        }
+        case vk::Format::eR8G8B8A8Srgb:
+        case vk::Format::eR8G8B8A8Unorm: {
+            return vk::Format::eR8G8B8A8Unorm;
+        }
+        default: {
+            throw std::runtime_error("Format not supported yet.");
+        }
+    }
+}
+
 // TODO: ADD MORE FUNCTION HERE
 }  // namespace
 
@@ -678,6 +699,7 @@ void VulkanApp::init() {
 
     Size2D<uint32_t> size = windowApp.getFrameSize();
     minImageCount = chooseSwapMinImageCount(physicalDevice.getSurfaceCapabilitiesKHR(surface));
+
     swapChain = createSwapChain(
         physicalDevice, device, surface, minImageCount, {size.width, size.height}
     );
@@ -686,8 +708,8 @@ void VulkanApp::init() {
     writeVertexBuffer(vertexBuffer);
 
     graphicsPipeline = createGraphicsPipeline(device, swapChain.surfaceFormat);
-    commandBuffers = createCommandBuffers(device, commandPool, queueFamilyIndex);
-    createSyncObjects(syncObjects, device, swapChain);
+    createFrames(commandPool, frames, device, queueFamilyIndex);
+
     initImgui();
 }
 
@@ -713,7 +735,11 @@ void VulkanApp::initImgui() {
     }
     ImGui::StyleColorsDark();
 
-    VkFormat format = static_cast<VkFormat>(swapChain.surfaceFormat.format);
+    vk::PipelineRenderingCreateInfoKHR pipelineInfo{
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &swapChain.surfaceFormat.format,
+    };
+
     ImGui_ImplVulkan_InitInfo initInfo{
         .ApiVersion = VK_API_VERSION_1_3,
         .Instance = *instance,
@@ -725,11 +751,7 @@ void VulkanApp::initImgui() {
         .MinImageCount = minImageCount,
         .ImageCount = static_cast<uint32_t>(swapChain.images.size()),
         .PipelineInfoMain = {
-            .PipelineRenderingCreateInfo = {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
-                .colorAttachmentCount = 1,
-                .pColorAttachmentFormats = &format,
-            },
+            .PipelineRenderingCreateInfo = *pipelineInfo,
         },
         .UseDynamicRendering = true
     };
@@ -750,9 +772,7 @@ void VulkanApp::initImgui() {
 void VulkanApp::recreateSwapChain() {
     Size2D<uint32_t> size = windowApp.getFrameSize();
     device.waitIdle();
-    swapChain.images.clear();
-    swapChain.imageViews.clear();
-    swapChain.swapChain = nullptr;
+    swapChain.reset();
     minImageCount = chooseSwapMinImageCount(physicalDevice.getSurfaceCapabilitiesKHR(surface));
     swapChain = createSwapChain(
         physicalDevice, device, surface, minImageCount, {size.width, size.height}
@@ -767,20 +787,18 @@ void VulkanApp::drawFrame() {
     }
     // Note: inFlightFences, presentCompleteSemaphores, and commandBuffers
     // are indexed by frameIndex, while renderFinishedSemaphores is indexed by imageIndex
-    const auto& commandBufFences = syncObjects.inFlightFences;
-    const auto& presentComplete = syncObjects.presentCompleteSemaphores;
-    const auto& renderFinished = syncObjects.renderFinishedSemaphores;
+    auto& frame = frames[frameIndex];
 
     vk::Result fenceResult = device.waitForFences(
-        *commandBufFences[frameIndex], vk::True, UINT64_MAX
+        *frame.fences, vk::True, UINT64_MAX
     );
     if (fenceResult != vk::Result::eSuccess) {
         throw std::runtime_error("failed to wait for fence!");
     }
-    device.resetFences(*commandBufFences[frameIndex]);
+    device.resetFences(*frame.fences);
 
     auto [result, imageIndex] = swapChain.swapChain.acquireNextImage(
-        UINT64_MAX, *presentComplete[frameIndex], nullptr
+        UINT64_MAX, *frame.presentComplete, nullptr
     );
 
     if (result == vk::Result::eErrorOutOfDateKHR) {
@@ -793,18 +811,16 @@ void VulkanApp::drawFrame() {
     }
 
     auto& image = swapChain.images[imageIndex];
-    auto& imageView = swapChain.imageViews[imageIndex];
-    auto& commandBuffer = commandBuffers[frameIndex];
-    commandBuffer.reset();
+    frame.cmdBuffer.reset();
 
     // record commandBuffer
     {
-        commandBuffer.begin({});
+        frame.cmdBuffer.begin({});
         // Before starting rendering, transition the swapchain image to
         // COLOR_ATTACHMENT_OPTIMAL
         transitionImageLayout(
-            swapChain.images[imageIndex],
-            commandBuffer,
+            image.image,
+            frame.cmdBuffer,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eColorAttachmentOptimal,
             {},  // srcAccessMask (no need to wait for previous operations)
@@ -813,8 +829,8 @@ void VulkanApp::drawFrame() {
             vk::PipelineStageFlagBits2::eColorAttachmentOutput
         );
         vk::ClearValue clearColor = {state.clearColor};
-        vk::RenderingAttachmentInfo attachmentInfo = {
-            .imageView = swapChain.imageViews[imageIndex],
+        vk::RenderingAttachmentInfo attachmentInfo = vk::RenderingAttachmentInfo{
+            .imageView = image.imageView,
             .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
             .loadOp = vk::AttachmentLoadOp::eClear,
             .storeOp = vk::AttachmentStoreOp::eStore,
@@ -829,12 +845,12 @@ void VulkanApp::drawFrame() {
             .colorAttachmentCount = 1,
             .pColorAttachments = &attachmentInfo
         };
-        commandBuffer.beginRendering(renderingInfo);
-        commandBuffer.bindPipeline(
+        frame.cmdBuffer.beginRendering(renderingInfo);
+        frame.cmdBuffer.bindPipeline(
             vk::PipelineBindPoint::eGraphics,
             *graphicsPipeline
         );
-        commandBuffer.setViewport(
+        frame.cmdBuffer.setViewport(
             0,
             vk::Viewport(
                 0.0f,
@@ -845,17 +861,17 @@ void VulkanApp::drawFrame() {
                 1.0f
             )
         );
-        commandBuffer.setScissor(
+        frame.cmdBuffer.setScissor(
             0, vk::Rect2D(vk::Offset2D(0, 0), swapChain.extent)
         );
-        commandBuffer.bindVertexBuffers(0, *vertexBuffer.buffer, {0});
-        commandBuffer.draw(3, 1, 0, 0);
-        drawImgui(commandBuffer, state);
-        commandBuffer.endRendering();
+        frame.cmdBuffer.bindVertexBuffers(0, *vertexBuffer.buffer, {0});
+        frame.cmdBuffer.draw(3, 1, 0, 0);
+        drawImgui(frame.cmdBuffer, state);
+        frame.cmdBuffer.endRendering();
         // After rendering, transition the swapchain image to PRESENT_SRC
         transitionImageLayout(
-            swapChain.images[imageIndex],
-            commandBuffers[frameIndex],
+            image.image,
+            frame.cmdBuffer,
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageLayout::ePresentSrcKHR,
             vk::AccessFlagBits2::eColorAttachmentWrite,
@@ -863,7 +879,7 @@ void VulkanApp::drawFrame() {
             vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             vk::PipelineStageFlagBits2::eBottomOfPipe
         );
-        commandBuffer.end();
+        frame.cmdBuffer.end();
     }
 
     vk::PipelineStageFlags waitDestinationStageMask(
@@ -871,19 +887,19 @@ void VulkanApp::drawFrame() {
     );
     const vk::SubmitInfo submitInfo{
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &*presentComplete[frameIndex],
+        .pWaitSemaphores = &*frame.presentComplete,
         .pWaitDstStageMask = &waitDestinationStageMask,
         .commandBufferCount = 1,
-        .pCommandBuffers = &*commandBuffers[frameIndex],
+        .pCommandBuffers = &*frame.cmdBuffer,
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &*renderFinished[imageIndex]
+        .pSignalSemaphores = &*image.renderComplete,
     };
-    queue.submit(submitInfo, *commandBufFences[frameIndex]);
+    queue.submit(submitInfo, *frame.fences);
 
     try {
         const vk::PresentInfoKHR presentInfoKHR{
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &*renderFinished[imageIndex],
+            .pWaitSemaphores = &*image.renderComplete,
             .swapchainCount = 1,
             .pSwapchains = &(*swapChain.swapChain),
             .pImageIndices = &imageIndex
