@@ -1,0 +1,12 @@
+add_requires("vulkan-headers", "glfw")
+
+target("imgui_vulkan_glfw", function () 
+    set_kind("object")
+    add_includedirs("./", {public= true})
+    add_defines("IMGUI_IMPL_VULKAN_NO_PROTOTYPES")
+    add_defines("VK_NO_PROTOTYPES")
+    add_packages("vulkan-headers", "glfw", {public= true})
+    add_files("./*.cpp")
+    add_files("./backends/imgui_impl_vulkan.cpp")
+    add_files("./backends/imgui_impl_glfw.cpp")
+end)

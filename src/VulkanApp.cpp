@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <print>
 #include <stdexcept>
 #include <tuple>
@@ -69,7 +70,7 @@ vk::PresentModeKHR chooseSwapPresentMode(
     //         return vk::PresentModeKHR::eMailbox;
     //     }
     // }
-    return vk::PresentModeKHR::eImmediate;
+    return vk::PresentModeKHR::eFifo;
 }
 
 std::vector<const char*> getRequiredExtensions() {
@@ -629,14 +630,20 @@ void drawImgui(vk::raii::CommandBuffer& buffer, VulkanApp::AppState& state) {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-    ImGui::ShowDemoWindow();
     {
+        auto size = ImGui::GetMainViewport()->Size;
+        ImGui::SetNextWindowSize(ImVec2(size.x * 0.75, 85.0f), ImGuiCond_Appearing);
         ImGui::Begin("Hello, world!");
         ImGui::ColorEdit3(
             "clear color",
             state.clearColor.getRaw()
         );
+        ImGui::SameLine();
+        ImGui::Checkbox("Demo Window", &state.showDemoWindow);
         ImGui::End();
+    }
+    if (state.showDemoWindow) {
+        ImGui::ShowDemoWindow(&(state.showDemoWindow));
     }
     ImGui::Render();
     ImDrawData* draw_data = ImGui::GetDrawData();
@@ -686,7 +693,7 @@ void VulkanApp::init() {
     instance = createInstance(context);
     debugMessenger = setupDebugMessenger(instance);
 
-    surface = windowApp.createSurface(instance);
+    surface = windowApp->createSurface(instance);
 
     physicalDevice = pickPhysicalDevice(instance);
 
@@ -697,7 +704,7 @@ void VulkanApp::init() {
         queue = vk::raii::Queue(device, queueFamilyIndex, 0);
     }
 
-    Size2D<uint32_t> size = windowApp.getFrameSize();
+    Size2D<uint32_t> size = windowApp->getFrameSize();
     minImageCount = chooseSwapMinImageCount(physicalDevice.getSurfaceCapabilitiesKHR(surface));
 
     swapChain = createSwapChain(
@@ -716,12 +723,20 @@ void VulkanApp::init() {
 void VulkanApp::initImgui() {
     ImGuiIO* imguiIo = &ImGui::GetIO();
     imguiIo->ConfigFlags |= ImGuiConfigFlags_IsSRGB;
+    imguiIo->IniFilename = NULL;
 
     // font
     ImFontConfig fontcfg;
-    fontcfg.RasterizerMultiply = 0.75f;
-    fontcfg.SizePixels = 20;
-    imguiIo->Fonts->AddFontDefault(&fontcfg);
+    fontcfg.OversampleH = 2;
+    fontcfg.OversampleV = 2;
+    fontcfg.PixelSnapH = true;
+    fontcfg.PixelSnapV = true;
+    fontcfg.RasterizerDensity = 0.86f;
+    imguiIo->Fonts->AddFontFromFileTTF(
+        "assets/fonts/IBMPlex/IBMPlexSans-Regular.ttf",
+        16.f,
+        &fontcfg
+    );
 
     // set style
     ImGuiStyle* style = &ImGui::GetStyle();
@@ -729,7 +744,8 @@ void VulkanApp::initImgui() {
     style->FrameRounding = 5.f;
     style->WindowPadding = {10, 5};
     style->FramePadding = {5, 2};
-    float scale = windowApp.getScale();
+    float scale = windowApp->getScale();
+    
     if (scale > 1) {
         style->FontScaleDpi = scale;
     }
@@ -738,6 +754,17 @@ void VulkanApp::initImgui() {
     vk::PipelineRenderingCreateInfoKHR pipelineInfo{
         .colorAttachmentCount = 1,
         .pColorAttachmentFormats = &swapChain.surfaceFormat.format,
+    };
+
+    auto vert = readFile("shaders/imgui/vert.spv");
+    vk::ShaderModuleCreateInfo vertInfo{
+        .codeSize = getVectorSize(vert),
+        .pCode = reinterpret_cast<uint32_t*>(vert.data())
+    };
+    auto frag = readFile("shaders/imgui/frag.spv");
+    vk::ShaderModuleCreateInfo fragInfo{
+        .codeSize = getVectorSize(frag),
+        .pCode = reinterpret_cast<uint32_t*>(frag.data())
     };
 
     ImGui_ImplVulkan_InitInfo initInfo{
@@ -753,7 +780,9 @@ void VulkanApp::initImgui() {
         .PipelineInfoMain = {
             .PipelineRenderingCreateInfo = *pipelineInfo,
         },
-        .UseDynamicRendering = true
+        .UseDynamicRendering = true,
+        .CustomShaderVertCreateInfo = vertInfo,
+        .CustomShaderFragCreateInfo = fragInfo
     };
 
     const static auto s_instance = &instance;
@@ -770,7 +799,7 @@ void VulkanApp::initImgui() {
 };
 
 void VulkanApp::recreateSwapChain() {
-    Size2D<uint32_t> size = windowApp.getFrameSize();
+    Size2D<uint32_t> size = windowApp->getFrameSize();
     device.waitIdle();
     swapChain.reset();
     minImageCount = chooseSwapMinImageCount(physicalDevice.getSurfaceCapabilitiesKHR(surface));
@@ -780,7 +809,7 @@ void VulkanApp::recreateSwapChain() {
 }
 
 void VulkanApp::drawFrame() {
-    if (!windowApp.getFrameSize().greaterThanZero()) {
+    if (!windowApp->getFrameSize().greaterThanZero()) {
         this->framebufferResized = true;
         // std::println("Minimized, skip rendering");
         return;
@@ -828,7 +857,7 @@ void VulkanApp::drawFrame() {
             vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             vk::PipelineStageFlagBits2::eColorAttachmentOutput
         );
-        vk::ClearValue clearColor = {state.clearColor};
+        vk::ClearValue clearColor = {state.clearColor.srgbToLinear()};
         vk::RenderingAttachmentInfo attachmentInfo = vk::RenderingAttachmentInfo{
             .imageView = image.imageView,
             .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -927,14 +956,14 @@ void VulkanApp::drawFrame() {
     frameIndex %= MAX_FRAMES_IN_FLIGHT;
 }
 
-VulkanApp::VulkanApp(WindowApp&& window)
+VulkanApp::VulkanApp(std::unique_ptr<WindowApp>&& window)
     : windowApp(std::move(window)) {
     init();
 }
 
 void VulkanApp::run() {
-    windowApp.cleanupCallBack = [this]() { device.waitIdle(); };
-    windowApp.resizeCallBack = [this](int, int) { onResize(); };
-    windowApp.drawFrameCallBack = [this]() { drawFrame(); };
-    windowApp.run();
+    windowApp->cleanupCallBack = [this]() { device.waitIdle(); };
+    windowApp->resizeCallBack = [this](int, int) { onResize(); };
+    windowApp->drawFrameCallBack = [this]() { drawFrame(); };
+    windowApp->run();
 }

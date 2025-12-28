@@ -82,4 +82,16 @@ struct GLFWwindowDeleter {
 };
 typedef std::unique_ptr<GLFWwindow, GLFWwindowDeleter> GLFWwindowWrapper;
 
+inline uint64_t getTimestamp() {
+    using namespace std::chrono;
+    auto now = system_clock::now();
+    auto duration = duration_cast<milliseconds>(now.time_since_epoch());
+    return duration.count();
+}
+
+template <class T>
+inline size_t getVectorSize(const std::vector<T>& vec) {
+    return vec.size() * sizeof(T);
+}
+
 #endif  // UTILS_HPP

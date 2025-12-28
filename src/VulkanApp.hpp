@@ -4,6 +4,7 @@
 // c++ std libs
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 // vulkan-hpp headers
@@ -60,11 +61,12 @@ public:
         vk::raii::Fence fences = nullptr;
     };
     struct AppState {
-        RGBAColor clearColor{0.f, 0.f, 0.f, 1.f};
+        RGBAColor clearColor{0.45f, 0.53f, 0.65f,1.f};
+        bool showDemoWindow = false;
     };
 
 private:
-    WindowApp windowApp;
+    std::unique_ptr<WindowApp> windowApp;
     vk::raii::Context context;
     vk::raii::Instance instance = nullptr;
     vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
@@ -91,7 +93,7 @@ private:
     void drawFrame();
 
 public:
-    explicit VulkanApp(WindowApp&&);
+    explicit VulkanApp(std::unique_ptr<WindowApp>&& window);
     void run();
 
     DISABLE_COPY(VulkanApp)

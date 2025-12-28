@@ -23,7 +23,12 @@ private:
     static void resizeCallBackHelper(GLFWwindow* window, int width, int height);
 
 public:
-    WindowApp(int width, int height, std::string_view tittle);
+    explicit WindowApp(int width, int height, std::string_view tittle);
+
+    WindowApp(const WindowApp&) = delete;
+    WindowApp& operator=(const WindowApp&) = delete;    
+    WindowApp(WindowApp&&) = delete;
+    WindowApp& operator=(WindowApp&&) = delete;
 
     std::function<void(int width, int height)> resizeCallBack;
     std::function<void()> drawFrameCallBack;

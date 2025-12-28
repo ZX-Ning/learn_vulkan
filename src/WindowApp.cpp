@@ -1,8 +1,8 @@
 #include "WindowApp.hpp"
 
 // std c++
+#include <cassert>
 #include <functional>
-#include <memory>
 #include <print>
 
 // vulkan
@@ -17,7 +17,10 @@
 #include <backends/imgui_impl_glfw.h>
 
 void WindowApp::resizeCallBackHelper(GLFWwindow* window, int width, int height) {
-    WindowApp* self = reinterpret_cast<WindowApp*>(glfwGetWindowUserPointer(window));
+    auto windowPtr = glfwGetWindowUserPointer(window);
+    assert(windowPtr != nullptr);
+    WindowApp* self = reinterpret_cast<WindowApp*>(windowPtr);
+    assert(window == self->window.get());
     std::println("Resized: {}x{}", width, height);
     self->resizeCallBack(width, height);
 }
@@ -36,7 +39,8 @@ WindowApp::WindowApp(int width, int height, std::string_view tittle) {
         nullptr,
         nullptr
     ));
-    glfwSetWindowUserPointer(window.get(), this);
+    void* selfPtr = this;
+    glfwSetWindowUserPointer((GLFWwindow*)window.get(), selfPtr);
     glfwSetFramebufferSizeCallback(
         window.get(),
         &resizeCallBackHelper
@@ -90,7 +94,7 @@ vk::raii::SurfaceKHR WindowApp::createSurface(const vk::raii::Instance& instance
 }
 
 float WindowApp::getScale() {
-    auto fbSize = getFrameSize();
-    auto winSize = getWindowSize();
-    return static_cast<float>(fbSize.width) / winSize.width;
+    float xscale, yscale;
+    glfwGetWindowContentScale(window.get(), &xscale, &yscale);
+    return xscale / 2 + yscale / 2;
 };

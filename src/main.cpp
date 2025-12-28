@@ -1,3 +1,4 @@
+#include <memory>
 #include <print>
 
 #include "VulkanApp.hpp"
@@ -9,7 +10,9 @@ const char* TITTLE = "Learn Vulkan";
 
 int main() {
     try {
-        VulkanApp app(WindowApp(WIDTH, HEIGHT, TITTLE));
+        VulkanApp app(
+            std::make_unique<WindowApp>(WIDTH, HEIGHT, TITTLE)
+        );
         app.run();
     }
     catch (const std::exception& e) {
