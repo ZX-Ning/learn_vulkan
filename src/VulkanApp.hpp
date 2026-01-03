@@ -63,6 +63,8 @@ public:
     struct AppState {
         RGBAColor clearColor{0.45f, 0.53f, 0.65f,1.f};
         bool showDemoWindow = false;
+        uint64_t lastRenderTimestamp;
+        float frameTime;
     };
 
 private:
@@ -89,7 +91,6 @@ private:
     void init();
     void initImgui();
     void recreateSwapChain();
-    void onResize();
     void drawFrame();
 
 public:

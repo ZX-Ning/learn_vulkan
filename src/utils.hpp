@@ -31,9 +31,6 @@ struct Size2D {
     static_assert(std::is_integral_v<T>);
     T width;
     T height;
-    bool greaterThanZero() {
-        return width > 0 && height > 0;
-    }
     template <class U>
     operator Size2D<U>() {
         return {
@@ -82,7 +79,7 @@ struct GLFWwindowDeleter {
 };
 typedef std::unique_ptr<GLFWwindow, GLFWwindowDeleter> GLFWwindowWrapper;
 
-inline uint64_t getTimestamp() {
+inline uint64_t getTimestampMs() {
     using namespace std::chrono;
     auto now = system_clock::now();
     auto duration = duration_cast<milliseconds>(now.time_since_epoch());

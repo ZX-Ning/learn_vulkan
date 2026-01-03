@@ -26,7 +26,7 @@ public:
     explicit WindowApp(int width, int height, std::string_view tittle);
 
     WindowApp(const WindowApp&) = delete;
-    WindowApp& operator=(const WindowApp&) = delete;    
+    WindowApp& operator=(const WindowApp&) = delete;
     WindowApp(WindowApp&&) = delete;
     WindowApp& operator=(WindowApp&&) = delete;
 
@@ -35,9 +35,10 @@ public:
     std::function<void()> cleanupCallBack;
     void run();
     Size2D<int> getWindowSize();
-    Size2D<int> getFrameSize();
+    Size2D<int> getFrameSize() const;
+    bool isMinimized() const;
     vk::raii::SurfaceKHR createSurface(const vk::raii::Instance& instance);
-    float getScale();
+    float getScale() const;
 };
 
 #endif  // WINDOWAPP_HPP

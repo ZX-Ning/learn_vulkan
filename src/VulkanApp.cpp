@@ -640,6 +640,7 @@ void drawImgui(vk::raii::CommandBuffer& buffer, VulkanApp::AppState& state) {
         );
         ImGui::SameLine();
         ImGui::Checkbox("Demo Window", &state.showDemoWindow);
+        ImGui::Text("fps: %.2fms", 1.0 / (state.frameTime / 1000.0));
         ImGui::End();
     }
     if (state.showDemoWindow) {
@@ -681,13 +682,8 @@ vk::Format formatToUnorm(vk::Format format) {
         }
     }
 }
-
 // TODO: ADD MORE FUNCTION HERE
 }  // namespace
-
-void VulkanApp::onResize() {
-    framebufferResized = true;
-}
 
 void VulkanApp::init() {
     instance = createInstance(context);
@@ -718,6 +714,7 @@ void VulkanApp::init() {
     createFrames(commandPool, frames, device, queueFamilyIndex);
 
     initImgui();
+    state.lastRenderTimestamp = getTimestampMs();
 }
 
 void VulkanApp::initImgui() {
@@ -745,7 +742,7 @@ void VulkanApp::initImgui() {
     style->WindowPadding = {10, 5};
     style->FramePadding = {5, 2};
     float scale = windowApp->getScale();
-    
+
     if (scale > 1) {
         style->FontScaleDpi = scale;
     }
@@ -809,11 +806,14 @@ void VulkanApp::recreateSwapChain() {
 }
 
 void VulkanApp::drawFrame() {
-    if (!windowApp->getFrameSize().greaterThanZero()) {
+    if (windowApp->isMinimized()) {
         this->framebufferResized = true;
-        // std::println("Minimized, skip rendering");
+        std::println("Minimized, skip rendering");
         return;
     }
+    uint64_t timeNow = getTimestampMs();
+    state.frameTime = timeNow - state.lastRenderTimestamp;
+    state.lastRenderTimestamp = timeNow;
     // Note: inFlightFences, presentCompleteSemaphores, and commandBuffers
     // are indexed by frameIndex, while renderFinishedSemaphores is indexed by imageIndex
     auto& frame = frames[frameIndex];
@@ -841,6 +841,8 @@ void VulkanApp::drawFrame() {
 
     auto& image = swapChain.images[imageIndex];
     frame.cmdBuffer.reset();
+    auto width = static_cast<float>(swapChain.extent.width);
+    auto height = static_cast<float>(swapChain.extent.height);
 
     // record commandBuffer
     {
@@ -880,15 +882,7 @@ void VulkanApp::drawFrame() {
             *graphicsPipeline
         );
         frame.cmdBuffer.setViewport(
-            0,
-            vk::Viewport(
-                0.0f,
-                0.0f,
-                static_cast<float>(swapChain.extent.width),
-                static_cast<float>(swapChain.extent.height),
-                0.0f,
-                1.0f
-            )
+            0, vk::Viewport(0.0f, 0.0f, width, height, 0.0f, 1.0f)
         );
         frame.cmdBuffer.setScissor(
             0, vk::Rect2D(vk::Offset2D(0, 0), swapChain.extent)
@@ -962,8 +956,11 @@ VulkanApp::VulkanApp(std::unique_ptr<WindowApp>&& window)
 }
 
 void VulkanApp::run() {
-    windowApp->cleanupCallBack = [this]() { device.waitIdle(); };
-    windowApp->resizeCallBack = [this](int, int) { onResize(); };
-    windowApp->drawFrameCallBack = [this]() { drawFrame(); };
+    windowApp->cleanupCallBack =
+        [this]() { this->device.waitIdle(); };
+    windowApp->resizeCallBack =
+        [this](int, int) { this->framebufferResized = true; };
+    windowApp->drawFrameCallBack =
+        [this]() { this->drawFrame(); };
     windowApp->run();
 }

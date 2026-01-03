@@ -77,10 +77,15 @@ Size2D<int> WindowApp::getWindowSize() {
     return {width, height};
 };
 
-Size2D<int> WindowApp::getFrameSize() {
+Size2D<int> WindowApp::getFrameSize() const {
     int width, height;
     glfwGetFramebufferSize(window.get(), &width, &height);
     return {width, height};
+}
+
+bool WindowApp::isMinimized() const {
+    int iconified = glfwGetWindowAttrib(window.get(), GLFW_ICONIFIED);
+    return iconified;
 }
 
 vk::raii::SurfaceKHR WindowApp::createSurface(const vk::raii::Instance& instance) {
@@ -93,7 +98,7 @@ vk::raii::SurfaceKHR WindowApp::createSurface(const vk::raii::Instance& instance
     return {instance, surface};
 }
 
-float WindowApp::getScale() {
+float WindowApp::getScale() const {
     float xscale, yscale;
     glfwGetWindowContentScale(window.get(), &xscale, &yscale);
     return xscale / 2 + yscale / 2;
