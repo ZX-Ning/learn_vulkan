@@ -9,7 +9,8 @@ struct ForwardRenderLayout;
 struct ModelLoader {
     static Model loadSimpleCubeModel(
         VulkanContext& context,
-        const ForwardRenderLayout& layout
+        const ForwardRenderLayout& layout,
+        vk::Format colorFormat
     );
 };
 

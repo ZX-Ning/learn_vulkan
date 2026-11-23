@@ -38,7 +38,7 @@ void ForwardPass::record(const ForwardPassContext& ctx) {
         }
     };
     vk::RenderingAttachmentInfo depthAttachmentInfo{
-        .imageView = ctx.frame.depthTexture->view,
+        .imageView = ctx.frame.depthTexture->view(),
         .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
         .loadOp = vk::AttachmentLoadOp::eClear,
         .storeOp = vk::AttachmentStoreOp::eDontCare,

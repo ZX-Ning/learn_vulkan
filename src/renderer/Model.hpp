@@ -7,17 +7,16 @@
 
 #include "../core/Buffer.hpp"
 
-struct Pipeline;
-struct Texture;
+class Texture;
 
 struct Mesh {
-    std::shared_ptr<StaticBuffer> vertexBuffer;
-    std::shared_ptr<StaticBuffer> indexBuffer;
+    std::shared_ptr<Buffer> vertexBuffer;
+    std::shared_ptr<Buffer> indexBuffer;
     uint32_t indexCount;
 };
 
 struct Material {
-    std::shared_ptr<Pipeline> pipeline;
+    std::shared_ptr<vk::raii::Pipeline> pipeline;
     std::shared_ptr<Texture> texture;
     std::shared_ptr<vk::raii::DescriptorSet> descriptorSet;
 };

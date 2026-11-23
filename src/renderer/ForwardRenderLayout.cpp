@@ -8,17 +8,21 @@
 
 ForwardRenderLayout::ForwardRenderLayout(const VulkanContext& context) {
     sceneSetLayout = vk::raii::DescriptorSetLayout(
-        context.device,
+        context.device(),
         vk::DescriptorSetLayoutCreateInfo{
             .bindingCount = 1,
             .pBindings = DefaultSceneUBO::descriptorSetLayoutBindings().data()
         }
     );
+    const vk::DescriptorSetLayoutBinding textureBinding{
+        .binding = 0, .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+        .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment
+    };
     materialSetLayout = vk::raii::DescriptorSetLayout(
-        context.device,
+        context.device(),
         vk::DescriptorSetLayoutCreateInfo{
             .bindingCount = 1,
-            .pBindings = Texture::descriptorSetLayoutBindings().data()
+            .pBindings = &textureBinding
         }
     );
 
@@ -32,7 +36,7 @@ ForwardRenderLayout::ForwardRenderLayout(const VulkanContext& context) {
         .size = sizeof(DefaultPushConstant),
     };
     pipelineLayout = vk::raii::PipelineLayout(
-        context.device,
+        context.device(),
         vk::PipelineLayoutCreateInfo{
             .setLayoutCount = static_cast<uint32_t>(setLayouts.size()),
             .pSetLayouts = setLayouts.data(),

@@ -8,6 +8,23 @@
 #include "VulkanUtils.hpp"
 
 namespace {
+vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& formats) {
+    for (auto desired : {
+             vk::Format::eB8G8R8A8Srgb,
+             vk::Format::eR8G8B8A8Srgb,
+             vk::Format::eB8G8R8A8Unorm,
+             vk::Format::eR8G8B8A8Unorm
+         }) {
+        for (const auto& format : formats) {
+            if (format.format == desired &&
+                format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+                return format;
+            }
+        }
+    }
+    throw std::runtime_error("No supported swapchain surface format");
+}
+
 vk::Extent2D chooseSwapExtent(
     const vk::SurfaceCapabilitiesKHR& capabilities,
     vk::Extent2D fbSize
@@ -18,10 +35,14 @@ vk::Extent2D chooseSwapExtent(
 
     return {
         .width = std::clamp<uint32_t>(
-            fbSize.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width
+            fbSize.width,
+            capabilities.minImageExtent.width,
+            capabilities.maxImageExtent.width
         ),
         .height = std::clamp<uint32_t>(
-            fbSize.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height
+            fbSize.height,
+            capabilities.minImageExtent.height,
+            capabilities.maxImageExtent.height
         )
     };
 }
@@ -51,17 +72,23 @@ vk::PresentModeKHR chooseSwapPresentMode(
 
 void SwapChain::init(const VulkanContext& context, Size2D<uint32_t> size) {
     auto surfaceCapabilities =
-        context.physicalDevice.getSurfaceCapabilitiesKHR(context.surface);
+        context.physicalDevice().getSurfaceCapabilitiesKHR(context.surface());
     this->extent = chooseSwapExtent(
         surfaceCapabilities,
         vk::Extent2D{size.width, size.height}
     );
-    this->surfaceFormat = context.surfaceFormat;
+    this->surfaceFormat = chooseSwapSurfaceFormat(
+        context
+            .physicalDevice()
+            .getSurfaceFormatsKHR(context.surface())
+    );
     minImageCount = chooseSwapMinImageCount(
-        context.physicalDevice.getSurfaceCapabilitiesKHR(context.surface)
+        context
+            .physicalDevice()
+            .getSurfaceCapabilitiesKHR(context.surface())
     );
     vk::SwapchainCreateInfoKHR swapChainCreateInfo{
-        .surface = context.surface,
+        .surface = context.surface(),
         .minImageCount = minImageCount,
         .imageFormat = surfaceFormat.format,
         .imageColorSpace = surfaceFormat.colorSpace,
@@ -72,12 +99,14 @@ void SwapChain::init(const VulkanContext& context, Size2D<uint32_t> size) {
         .preTransform = surfaceCapabilities.currentTransform,
         .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
         .presentMode = chooseSwapPresentMode(
-            context.physicalDevice.getSurfacePresentModesKHR(context.surface)
+            context
+                .physicalDevice()
+                .getSurfacePresentModesKHR(context.surface())
         ),
         .clipped = true
     };
 
-    this->vkSwapChain = vk::raii::SwapchainKHR{context.device, swapChainCreateInfo};
+    this->vkSwapChain = vk::raii::SwapchainKHR{context.device(), swapChainCreateInfo};
     auto swapChainImages = vkSwapChain.getImages();
 
     vk::ImageViewCreateInfo imageViewCreateInfo{
@@ -97,8 +126,8 @@ void SwapChain::init(const VulkanContext& context, Size2D<uint32_t> size) {
         this->images.emplace_back(
             // vk::Image is a non-owning handle; copy it instead of moving.
             image,
-            vk::raii::ImageView{context.device, imageViewCreateInfo},
-            vk::raii::Semaphore{context.device, vk::SemaphoreCreateInfo{}}
+            vk::raii::ImageView{context.device(), imageViewCreateInfo},
+            vk::raii::Semaphore{context.device(), vk::SemaphoreCreateInfo{}}
         );
     }
 };
@@ -108,7 +137,7 @@ SwapChain::SwapChain(const VulkanContext& context, Size2D<uint32_t> size) {
 }
 
 void SwapChain::recreate(const VulkanContext& context, Size2D<uint32_t> size) {
-    context.device.waitIdle();
+    context.device().waitIdle();
     // Don't use release, which does not delete the resource.
     vkSwapChain = nullptr;
     extent = vk::Extent2D{0, 0},

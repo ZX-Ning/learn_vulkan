@@ -1,4 +1,5 @@
 #include "App.hpp"
+#include "VulkanSetup.hpp"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -19,14 +20,14 @@ static const std::unordered_map<int, glm::vec<3, int8_t>> KEY_MOVE{
     {SDL_SCANCODE_LSHIFT, {0, -1, 0}}
 };
 
-App::App() {
+App::App(bool validation) {
     state = std::make_unique<AppState>();
     window = std::make_unique<WindowApp>(Consts::WIDTH, Consts::HEIGHT, Consts::TITLE, *state);
-    context = std::make_unique<VulkanContext>(*window);
+    context = std::make_unique<VulkanContext>(rendererContextDesc(*window, validation));
     swapchain = std::make_unique<SwapChain>(*context, window->getFrameSize());
     imgui = std::make_unique<ImguiApp>(*window, *context, *swapchain);
     forwardLayout = std::make_unique<ForwardRenderLayout>(*context);
-    defaultModel = ModelLoader::loadSimpleCubeModel(*context, *forwardLayout);
+    defaultModel = ModelLoader::loadSimpleCubeModel(*context, *forwardLayout, swapchain->surfaceFormat.format);
     defaultRenderobj.reset(new RenderObject{
         .model = defaultModel,
         .position = {0.f, 0.f, 1.f},
@@ -49,7 +50,7 @@ App::App() {
 void App::setupCallback() {
     (*window).cleanupCallBack =
         [this]() {
-            this->context->device.waitIdle();
+            this->context->device().waitIdle();
         };
     (*window).resizeCallBack =
         [this](int, int) {

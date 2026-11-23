@@ -11,7 +11,7 @@
 
 struct WindowApp;
 struct AppState;
-struct VulkanContext;
+class VulkanContext;
 struct Scene;
 struct SwapChain;
 struct SDL_Window;

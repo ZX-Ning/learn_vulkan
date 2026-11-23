@@ -1,38 +1,85 @@
 #ifndef VULKANCONTEXT_HPP
 #define VULKANCONTEXT_HPP
+#include <functional>
 
-#include <vulkan/vulkan_raii.hpp>
-#include <vulkan/vulkan_structs.hpp>
-
-#include "../utils.hpp"
+#include "DeviceConfig.hpp"
 #include "VulkanUtils.hpp"
 
-struct WindowApp;
-struct VulkanContext;
+enum class GpuPreference { None, Discrete, Integrated };
 
-struct VulkanContext {
-    vk::raii::Context context;
-    vk::raii::Instance instance{nullptr};
-    vk::raii::DebugUtilsMessengerEXT debugMessenger{nullptr};
-    vk::raii::PhysicalDevice physicalDevice{nullptr};
-    vk::raii::Device device{nullptr};
-    vk::raii::SurfaceKHR surface{nullptr};
-    vk::raii::Queue queue{nullptr};
-    vk::raii::CommandPool commandPool{nullptr};
-    uint32_t queueFamilyIndex = ~0;
-    vk::raii::CommandBuffer loadingCmdBuffer{nullptr};
-    vk::raii::DescriptorPool descriptorPool{nullptr};
-
-    VmaAllocatorWrapper allocator;
-    vk::SurfaceFormatKHR surfaceFormat;
-    void initLogicalDevice();
-    void initVmaAllocator();
-    explicit VulkanContext(WindowApp&);
-    ~VulkanContext();
-
-    DISABLE_COPY(VulkanContext)
-    VulkanContext(VulkanContext&&) = delete;
-    VulkanContext& operator=(VulkanContext&&) = delete;
+struct ContextDesc {
+    std::string applicationName = "Vulkan application";
+    bool validation = false;
+    // A preference, not a requirement. Falls back to another eligible device;
+    // None selects the first eligible device in Vulkan enumeration order.
+    GpuPreference gpuPreference = GpuPreference::Discrete;
+    std::vector<std::string> instanceExtensions;
+    // Optional adapter callback. Core has no SDL/window-system dependency.
+    std::function<vk::raii::SurfaceKHR(const vk::raii::Instance&)>
+        createSurface;
+    DeviceRequirements device;
 };
 
-#endif  // VULKANCONTEXT_HPP
+class VulkanContext {
+public:
+    explicit VulkanContext(const ContextDesc& desc);
+    ~VulkanContext() = default;
+    VulkanContext(const VulkanContext&) = delete;
+    VulkanContext& operator=(const VulkanContext&) = delete;
+    VulkanContext(VulkanContext&&) = delete;
+    VulkanContext& operator=(VulkanContext&&) = delete;
+
+    const vk::raii::Instance& instance() const noexcept {
+        return instance_;
+    }
+    const vk::raii::PhysicalDevice& physicalDevice() const noexcept {
+        return physicalDevice_;
+    }
+    const vk::raii::Device& device() const noexcept {
+        return device_;
+    }
+    const vk::raii::SurfaceKHR& surface() const noexcept {
+        return surface_;
+    }
+    const vk::raii::Queue& queue() const noexcept {
+        return queue_;
+    }
+    const vk::raii::CommandPool& commandPool() const noexcept {
+        return commandPool_;
+    }
+    const vk::raii::DescriptorPool& descriptorPool() const noexcept {
+        return descriptorPool_;
+    }
+    uint32_t queueFamilyIndex() const noexcept {
+        return plan_->queueFamilyIndex;
+    }
+    VmaAllocator allocator() const noexcept {
+        return *allocator_;
+    }
+    const DeviceCapabilities& capabilities() const noexcept {
+        return capabilities_;
+    }
+    const DevicePlan& enabledDevice() const noexcept {
+        return *plan_;
+    }
+    // Referenced GPU resources survive until return. Queue/pool access must be
+    // externally synchronized. A recording exception occurs before submission.
+    void submitAndWait(
+        const std::function<void(vk::raii::CommandBuffer&)>& record
+    ) const;
+
+private:
+    vk::raii::Context context_;
+    vk::raii::Instance instance_{nullptr};
+    vk::raii::DebugUtilsMessengerEXT debugMessenger_{nullptr};
+    vk::raii::SurfaceKHR surface_{nullptr};
+    vk::raii::PhysicalDevice physicalDevice_{nullptr};
+    DeviceCapabilities capabilities_;
+    std::unique_ptr<DevicePlan> plan_;
+    vk::raii::Device device_{nullptr};
+    vk::raii::Queue queue_{nullptr};
+    vk::raii::CommandPool commandPool_{nullptr};
+    vk::raii::DescriptorPool descriptorPool_{nullptr};
+    VmaAllocatorWrapper allocator_;
+};
+#endif

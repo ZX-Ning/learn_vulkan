@@ -67,11 +67,11 @@ void ImguiApp::initImguiForVk(
 
     ImGui_ImplVulkan_InitInfo initInfo{
         .ApiVersion = VK_API_VERSION_1_3,
-        .Instance = *context.instance,
-        .PhysicalDevice = *context.physicalDevice,
-        .Device = *context.device,
-        .QueueFamily = context.queueFamilyIndex,
-        .Queue = *context.queue,
+        .Instance = *context.instance(),
+        .PhysicalDevice = *context.physicalDevice(),
+        .Device = *context.device(),
+        .QueueFamily = context.queueFamilyIndex(),
+        .Queue = *context.queue(),
         .DescriptorPoolSize = 0xff,
         .MinImageCount = imageCount,
         .ImageCount = imageCount,
@@ -92,7 +92,7 @@ void ImguiApp::initImguiForVk(
                 ->getDispatcher()
                 ->vkGetInstanceProcAddr(**instance, name);
         },
-        (void*)(&context.instance)  // using c-style cast for const + reinterpret cast
+        (void*)(&context.instance())  // using c-style cast for const + reinterpret cast
     );
 
     ImGui_ImplVulkan_Init(&initInfo);

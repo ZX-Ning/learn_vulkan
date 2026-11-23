@@ -5,6 +5,7 @@
 
 #include "../core/Buffer.hpp"
 #include "../core/Texture.hpp"
+#include "Textures.hpp"
 #include "../core/VulkanContext.hpp"
 #include "../core/VulkanUtils.hpp"
 #include "ForwardShaderData.hpp"
@@ -16,18 +17,18 @@ FrameContext::FrameContext(
     Size2D<uint32_t> size
 )
     : cmdBuffer(std::move(commandBuffer)),
-      presentComplete(ctx.device, vk::SemaphoreCreateInfo{}),
-      fences(ctx.device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled}),
+      presentComplete(ctx.device(), vk::SemaphoreCreateInfo{}),
+      fences(ctx.device(), vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled}),
       sceneDescriptorSet(std::move(sceneSet)) {
-    sceneUniformBuf = BufferFactory::createDynamicBuffer(
-        BufferFactory::Type::Uniform,
-        *ctx.allocator,
-        sizeof(DefaultSceneUBO)
-    );
+    sceneUniformBuf = std::make_shared<Buffer>(ctx.allocator(), BufferDesc{
+        .size = sizeof(DefaultSceneUBO),
+        .usage = vk::BufferUsageFlagBits::eUniformBuffer,
+        .memory = MemoryAccess::Upload
+    });
     recreateTextures(ctx, size);
 
     vk::DescriptorBufferInfo bufferInfo{
-        .buffer = sceneUniformBuf->getVkBuffer(),
+        .buffer = sceneUniformBuf->handle(),
         .offset = 0,
         .range = sizeof(DefaultSceneUBO)
     };
@@ -41,7 +42,7 @@ FrameContext::FrameContext(
             .pBufferInfo = &bufferInfo
         }
     };
-    ctx.device.updateDescriptorSets(descriptorWrites, {});
+    ctx.device().updateDescriptorSets(descriptorWrites, {});
 }
 
 void FrameContext::reset(const vk::raii::Device& device) {
@@ -67,7 +68,7 @@ void FrameContext::recreateTextures(const VulkanContext& ctx, Size2D<uint32_t> s
 void FrameContext::transitionDepthToAttachment(vk::raii::CommandBuffer& cmd) {
     transitionImageLayout(
         cmd,
-        depthTexture->image,
+        depthTexture->image().handle(),
         vk::ImageLayout::eUndefined,
         vk::ImageLayout::eDepthAttachmentOptimal,
         vk::PipelineStageFlagBits2::eTopOfPipe,
@@ -86,21 +87,21 @@ std::vector<FrameContext> FrameContext::createFrameInFlights(
     vk::DescriptorSetLayout sceneSetLayout
 ) {
     vk::CommandBufferAllocateInfo allocInfo{
-        .commandPool = ctx.commandPool,
+        .commandPool = ctx.commandPool(),
         .level = vk::CommandBufferLevel::ePrimary,
         .commandBufferCount = static_cast<uint32_t>(fif)
     };
-    vk::raii::CommandBuffers commandbufs{ctx.device, allocInfo};
+    vk::raii::CommandBuffers commandbufs{ctx.device(), allocInfo};
 
     std::vector<vk::DescriptorSetLayout> desSetLayouts(
         fif, sceneSetLayout
     );
     vk::DescriptorSetAllocateInfo setAllocInfo{
-        .descriptorPool = ctx.descriptorPool,
+        .descriptorPool = ctx.descriptorPool(),
         .descriptorSetCount = static_cast<uint32_t>(desSetLayouts.size()),
         .pSetLayouts = desSetLayouts.data()
     };
-    vk::raii::DescriptorSets sets{ctx.device, setAllocInfo};
+    vk::raii::DescriptorSets sets{ctx.device(), setAllocInfo};
 
     assert(commandbufs.size() == static_cast<size_t>(fif));
     assert(sets.size() == static_cast<size_t>(fif));

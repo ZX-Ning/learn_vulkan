@@ -30,7 +30,7 @@ private:
     void onDraw();
 
 public:
-    App();
+    explicit App(bool validation = !IS_RELEASE);
     void run();
 };
 

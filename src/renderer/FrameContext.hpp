@@ -9,8 +9,8 @@
 #include "../core/Texture.hpp"
 #include "../utils.hpp"
 
-struct DynamicBuffer;
-struct VulkanContext;
+class Buffer;
+class VulkanContext;
 
 struct FrameContext {
     vk::raii::CommandBuffer cmdBuffer{nullptr};
@@ -18,7 +18,7 @@ struct FrameContext {
     vk::raii::Fence fences{nullptr};
     vk::raii::DescriptorSet sceneDescriptorSet{nullptr};
     std::array<std::unique_ptr<Texture>, 2> pingpongTexture;
-    std::shared_ptr<DynamicBuffer> sceneUniformBuf;
+    std::shared_ptr<Buffer> sceneUniformBuf;
     std::unique_ptr<Texture> depthTexture;
 
     FrameContext(

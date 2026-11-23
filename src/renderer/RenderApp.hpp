@@ -24,7 +24,7 @@
 
 // forward declaration
 struct WindowApp;
-struct VulkanContext;
+class VulkanContext;
 struct SwapChain;
 struct Scene;
 ////////////////////////

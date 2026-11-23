@@ -3,7 +3,7 @@
 
 #include <vulkan/vulkan_raii.hpp>
 
-struct VulkanContext;
+class VulkanContext;
 
 struct ForwardRenderLayout {
     vk::raii::DescriptorSetLayout sceneSetLayout{nullptr};

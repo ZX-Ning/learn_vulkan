@@ -68,7 +68,7 @@ void RenderApp::drawFrame() {
     // are indexed by frameIndex, while renderFinishedSemaphores is indexed by imageIndex
     auto& currentFrame = frames[frameIndex];
 
-    currentFrame.wait(context.device);
+    currentFrame.wait(context.device());
     uint32_t imageIndex = 0;
     try {
         imageIndex = swapChain.acquireNextImage(currentFrame.presentComplete);
@@ -77,7 +77,7 @@ void RenderApp::drawFrame() {
         recreateSwapChainResources(size);
         return;
     }
-    currentFrame.reset(context.device);
+    currentFrame.reset(context.device());
 
     auto& currentImage = swapChain.images[imageIndex];
     auto& currentCmdBuffer = currentFrame.cmdBuffer;
@@ -115,7 +115,7 @@ void RenderApp::drawFrame() {
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = &*currentImage.imageAcquired,
     };
-    context.queue.submit(submitInfo, *currentFrame.fences);
+    context.queue().submit(submitInfo, *currentFrame.fences);
 
     try {
         const vk::PresentInfoKHR presentInfoKHR{
@@ -125,7 +125,7 @@ void RenderApp::drawFrame() {
             .pSwapchains = &(*swapChain.vkSwapChain),
             .pImageIndices = &imageIndex
         };
-        auto result = context.queue.presentKHR(presentInfoKHR);
+        auto result = context.queue().presentKHR(presentInfoKHR);
         if (result == vk::Result::eSuboptimalKHR || framebufferResized) {
             framebufferResized = false;
             recreateSwapChainResources(size);

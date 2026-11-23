@@ -10,7 +10,8 @@
 struct AllocatorDeleter {
     void operator()(VmaAllocator* ptr) const noexcept {
         if (ptr) {
-            vmaDestroyAllocator(*ptr);
+            if (*ptr) vmaDestroyAllocator(*ptr);
+            delete ptr;
         }
     }
 };

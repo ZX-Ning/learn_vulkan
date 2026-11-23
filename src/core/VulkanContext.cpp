@@ -1,149 +1,66 @@
 #include "VulkanContext.hpp"
 
-#include <SDL3/SDL_error.h>
-#include <SDL3/SDL_vulkan.h>
-#include <vk_mem_alloc.h>
-
-#include <cassert>
-#include <format>
+#include <algorithm>
 #include <print>
 #include <stdexcept>
 
-// vulkan
-#include <vulkan/vulkan_raii.hpp>
-#include <vulkan/vulkan_structs.hpp>
-
-#include "../WindowApp.hpp"
-#include "../utils.hpp"
-
 namespace {
-
-constexpr bool ENABLE_VALIDATION_LAYERS = !IS_RELEASE;
-const std::vector<char const*> validationLayers = {
-    "VK_LAYER_KHRONOS_validation"
-};
-const std::vector<const char*> requiredDeviceExtension = {
-    vk::KHRSwapchainExtensionName,
-    vk::KHRSpirv14ExtensionName,
-    vk::KHRSynchronization2ExtensionName,
-    vk::KHRCreateRenderpass2ExtensionName,
-    vk::KHRDynamicRenderingExtensionName,
-    vk::EXTMemoryBudgetExtensionName
-};
-
-std::vector<const char*> getRequiredExtensions() {
-    Uint32 sdlExtensionCount = 0;
-    const char* const* sdlExtensions =
-        SDL_Vulkan_GetInstanceExtensions(&sdlExtensionCount);
-    if (!sdlExtensions) {
-        throw std::runtime_error(
-            std::format("failed to get SDL Vulkan instance extensions: {}", SDL_GetError())
-        );
+std::vector<const char*> pointers(const std::vector<std::string>& names) {
+    std::vector<const char*> result;
+    for (const auto& name : names) {
+        result.push_back(name.c_str());
     }
-
-    std::vector extensions(sdlExtensions, sdlExtensions + sdlExtensionCount);
-    if (ENABLE_VALIDATION_LAYERS) {
-        extensions.push_back(vk::EXTDebugUtilsExtensionName);
-    }
-    return extensions;
+    return result;
 }
-
-vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
-    const std::vector<vk::SurfaceFormatKHR>& availableFormats
+vk::raii::Instance createInstance(
+    const vk::raii::Context& context, const ContextDesc& desc
 ) {
-    assert(!availableFormats.empty());
-    for (const auto& format : availableFormats) {
-        if ((format.format == vk::Format::eB8G8R8A8Srgb ||
-             format.format == vk::Format::eR8G8B8A8Srgb) &&
-            format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
-            return format;
+    std::vector<std::string> extensions = desc.instanceExtensions;
+    if (desc.validation &&
+        std::ranges::find(extensions, vk::EXTDebugUtilsExtensionName) ==
+            extensions.end()) {
+        extensions.emplace_back(vk::EXTDebugUtilsExtensionName);
+    }
+    auto available = context.enumerateInstanceExtensionProperties();
+    for (const auto& name : extensions) {
+        if (std::none_of(
+                available.begin(), available.end(), [&](const auto& e) {
+                    return name == e.extensionName.data();
+                }
+            )) {
+            throw std::runtime_error("Missing instance extension: " + name);
         }
     }
-    for (const auto& format : availableFormats) {
-        if ((format.format == vk::Format::eB8G8R8A8Unorm ||
-             format.format == vk::Format::eR8G8B8A8Unorm) &&
-            format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
-            std::println("Can not found Srgb Format, using Unorm.");
-            return format;
+    std::vector<const char*> layers;
+    if (desc.validation) {
+        auto availableLayers = context.enumerateInstanceLayerProperties();
+        if (std::none_of(
+                availableLayers.begin(),
+                availableLayers.end(),
+                [](const auto& layer) {
+                    return std::string_view(layer.layerName.data()) ==
+                           "VK_LAYER_KHRONOS_validation";
+                }
+            )) {
+            throw std::runtime_error("Missing VK_LAYER_KHRONOS_validation");
         }
+        layers.push_back("VK_LAYER_KHRONOS_validation");
     }
-    throw std::runtime_error("Format not supported yet");
-    // return availableFormats[0];
-}
-
-vk::raii::Instance createInstance(const vk::raii::Context& context) {
-    constexpr vk::ApplicationInfo appInfo = {
-        .pApplicationName = "Learn Vulkan",
-        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-        .pEngineName = "No Engine",
-        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+    auto names = pointers(extensions);
+    vk::ApplicationInfo app{
+        .pApplicationName = desc.applicationName.c_str(),
         .apiVersion = vk::ApiVersion13
     };
-
-    // Get the required layers
-    std::vector<char const*> requiredLayers;
-    if (ENABLE_VALIDATION_LAYERS) {
-        std::println("Enable validation layers.");
-        requiredLayers.assign(validationLayers.begin(), validationLayers.end());
-    }
-    else {
-        std::println("Release mode. Disable validation layers.");
-    }
-
-    // Check if the required layers are supported by the Vulkan implementation.
-    auto layerProperties = context.enumerateInstanceLayerProperties();
-    for (auto const& requiredLayer : requiredLayers) {
-        bool layerFound = false;
-        for (auto const& layerProperty : layerProperties) {
-            if (strcmp(layerProperty.layerName, requiredLayer) == 0) {
-                layerFound = true;
-                break;
-            }
-        }
-
-        if (!layerFound) {
-            throw std::runtime_error(
-                std::format("Required layer not supported: {}", std::string(requiredLayer))
-            );
-        }
-    }
-
-    // Get the required extensions.
-    auto requiredExtensions = getRequiredExtensions();
-
-    // Check if the required extensions are supported by the Vulkan
-    // implementation.
-    auto extensionProperties =
-        context.enumerateInstanceExtensionProperties();
-    for (auto const& requiredExtension : requiredExtensions) {
-        bool extensionFound = false;
-        for (auto const& extensionProperty : extensionProperties) {
-            if (strcmp(extensionProperty.extensionName, requiredExtension) == 0) {
-                extensionFound = true;
-                break;
-            }
-        }
-
-        if (!extensionFound) {
-            throw std::runtime_error(
-                std::format("Required extension not supported: {}", requiredExtension)
-            );
-        }
-    }
-
-    vk::InstanceCreateInfo createInfo{
-        .pApplicationInfo = &appInfo,
-        .enabledLayerCount = static_cast<uint32_t>(requiredLayers.size()),
-        .ppEnabledLayerNames = requiredLayers.data(),
-        .enabledExtensionCount =
-            static_cast<uint32_t>(requiredExtensions.size()),
-        .ppEnabledExtensionNames = requiredExtensions.data()
-    };
-    return {context, createInfo};
+    return context.createInstance(
+        vk::InstanceCreateInfo{.pApplicationInfo = &app}
+            .setPEnabledExtensionNames(names)
+            .setPEnabledLayerNames(layers)
+    );
 }
-
-vk::raii::DebugUtilsMessengerEXT setupDebugMessenger(const vk::raii::Instance& instance) {
-    if (!ENABLE_VALIDATION_LAYERS) {
+vk::raii::DebugUtilsMessengerEXT setupDebugMessenger(
+    const vk::raii::Instance& instance, bool enableValidation
+) {
+    if (!enableValidation) {
         return nullptr;
     }
     vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
@@ -160,14 +77,13 @@ vk::raii::DebugUtilsMessengerEXT setupDebugMessenger(const vk::raii::Instance& i
         .messageSeverity = severityFlags,
         .messageType = messageTypeFlags,
         .pfnUserCallback =
-            [](
-                vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
-                vk::DebugUtilsMessageTypeFlagsEXT type,
-                const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
-                void*
-            ) -> vk::Bool32 {
+            [](vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
+               vk::DebugUtilsMessageTypeFlagsEXT type,
+               const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
+               void*) -> vk::Bool32 {
             if (severity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eError ||
-                severity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning) {
+                severity ==
+                    vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning) {
                 std::println(
                     "[{}] {}, {}",
                     vk::to_string(severity),
@@ -178,82 +94,12 @@ vk::raii::DebugUtilsMessengerEXT setupDebugMessenger(const vk::raii::Instance& i
             return vk::False;
         }
     };
-    return instance.createDebugUtilsMessengerEXT(debugUtilsMessengerCreateInfoEXT);
+    return instance.createDebugUtilsMessengerEXT(
+        debugUtilsMessengerCreateInfoEXT
+    );
 }
 
-vk::raii::PhysicalDevice pickPhysicalDevice(vk::raii::Instance& instance) {
-    std::vector<vk::raii::PhysicalDevice> devices =
-        instance.enumeratePhysicalDevices();
-
-    // vk::raii::PhysicalDevice* selectedDevice = nullptr;
-    std::vector<Ref<vk::raii::PhysicalDevice>> devicesFiltered;
-    for (vk::raii::PhysicalDevice& device : devices) {
-        // Check if the device supports the Vulkan 1.3 API version
-        bool supportsVulkan1_3 =
-            device.getProperties().apiVersion >= VK_API_VERSION_1_3;
-
-        // Check if any of the queue families support graphics operations
-        auto queueFamilies = device.getQueueFamilyProperties();
-        bool supported = false;
-        for (const vk::QueueFamilyProperties& qfp : queueFamilies) {
-            if (qfp.queueFlags & (vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eCompute)) {
-                supported = true;
-                break;
-            }
-        }
-
-        // Check if all required device extensions are available
-        std::vector<vk::ExtensionProperties> availableDeviceExtensions =
-            device.enumerateDeviceExtensionProperties();
-        bool supportsAllRequiredExtensions = true;
-        for (auto const& requiredDeviceExtension : requiredDeviceExtension) {
-            bool extensionFound = false;
-            for (auto const& availableDeviceExtension : availableDeviceExtensions) {
-                if (strcmp(availableDeviceExtension.extensionName, requiredDeviceExtension) == 0) {
-                    extensionFound = true;
-                    break;
-                }
-            }
-            if (!extensionFound) {
-                supportsAllRequiredExtensions = false;
-                break;
-            }
-        }
-
-        auto features = device.getFeatures2<
-            vk::PhysicalDeviceFeatures2,
-            vk::PhysicalDeviceVulkan11Features,
-            vk::PhysicalDeviceVulkan13Features,
-            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
-
-        bool supportsRequiredFeatures =
-            features.get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
-            features.get<vk::PhysicalDeviceVulkan13Features>().synchronization2 &&
-            features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
-            features.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
-
-        if (supportsVulkan1_3 && supported &&
-            supportsAllRequiredExtensions && supportsRequiredFeatures) {
-            devicesFiltered.push_back(device);
-        }
-    }
-    for (vk::raii::PhysicalDevice& device : devicesFiltered) {
-        auto props = device.getProperties();
-        if (props.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) {
-            std::println("Device: {}", props.deviceName.data());
-            return device;
-        }
-    }
-    if (!devices.empty()) {
-        std::println("Device: {}", devices[0].getProperties().deviceName.data());
-        return devices[0];
-    }
-    throw std::runtime_error("failed to find a suitable GPU!");
-}
-
-vk::raii::DescriptorPool createDescriptorPool(
-    const vk::raii::Device& device
-) {
+vk::raii::DescriptorPool createDescriptorPool(const vk::raii::Device& device) {
     std::vector<vk::DescriptorPoolSize> poolSizes{};
     for (int i = 0; i <= 10; i++) {
         poolSizes.push_back({(vk::DescriptorType)i, 1 << 10});
@@ -269,110 +115,117 @@ vk::raii::DescriptorPool createDescriptorPool(
 
 }  // namespace
 
-VulkanContext::VulkanContext(WindowApp& windowApp) {
-    std::println("Starting Vulkan instance.");
-
-    this->instance = createInstance(context);
-    this->debugMessenger = setupDebugMessenger(instance);
-    this->surface = windowApp.createSurface(instance);
-    this->physicalDevice = pickPhysicalDevice(instance);
-    initLogicalDevice();
-    initVmaAllocator();
-    // Create command pool
-    vk::CommandPoolCreateInfo poolInfo{
-        .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-        .queueFamilyIndex = queueFamilyIndex
-    };
-    this->commandPool = vk::raii::CommandPool(device, poolInfo);
-    vk::CommandBufferAllocateInfo allocInfo{
-        .commandPool = commandPool,
-        .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = 1
-    };
-    this->loadingCmdBuffer =
-        std::move(device.allocateCommandBuffers(allocInfo)[0]);
-    this->surfaceFormat = chooseSwapSurfaceFormat(
-        physicalDevice.getSurfaceFormatsKHR(surface)
-    );
-    this->descriptorPool = createDescriptorPool(device);
-}
-
-VulkanContext::~VulkanContext() {
-    std::println("Cleaning up Vulkan instance.");
-};
-
-void VulkanContext::initLogicalDevice() {
-    std::vector<vk::QueueFamilyProperties> queueFamilyProperties =
-        physicalDevice.getQueueFamilyProperties();
-
-    // get the first index into queueFamilyProperties which supports both
-    // graphics and present
-    uint32_t queueIndex = ~0;
-    for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++) {
-        if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics) &&
-            physicalDevice.getSurfaceSupportKHR(qfpIndex, *surface)) {
-            // found a queue family that supports both graphics and present
-            queueIndex = qfpIndex;
-            break;
+VulkanContext::VulkanContext(const ContextDesc& desc) {
+    instance_ = createInstance(context_, desc);
+    debugMessenger_ = setupDebugMessenger(instance_, desc.validation);
+    if (desc.createSurface) {
+        surface_ = desc.createSurface(instance_);
+        if (!*surface_) {
+            throw std::runtime_error("Surface adapter returned a null surface");
         }
     }
-    if (queueIndex == (uint32_t)~0) {
-        throw std::runtime_error(
-            "Could not find a queue for graphics and present -> "
-            "terminating"
-        );
+    auto devices = instance_.enumeratePhysicalDevices();
+    std::string failures;
+    int selectedScore = -1;
+    for (auto& candidate : devices) {
+        auto caps = queryDeviceCapabilities(candidate);
+        auto resolution =
+            resolveDevice(candidate, caps, desc.device, *surface_);
+        if (const auto* errors = std::get_if<DeviceErrors>(&resolution)) {
+            failures += std::string(caps.properties.deviceName.data()) + ":";
+            for (const auto& error : *errors) {
+                failures += "\n  " + error;
+            }
+            failures += "\n";
+            continue;
+        }
+        const auto type = caps.properties.deviceType;
+        int score = 0;
+        if (desc.gpuPreference != GpuPreference::None) {
+            const auto preferredType =
+                desc.gpuPreference == GpuPreference::Integrated
+                    ? vk::PhysicalDeviceType::eIntegratedGpu
+                    : vk::PhysicalDeviceType::eDiscreteGpu;
+            if (type == preferredType) {
+                score = 2;
+            }
+            else if (
+                type == vk::PhysicalDeviceType::eIntegratedGpu ||
+                type == vk::PhysicalDeviceType::eDiscreteGpu
+            ) {
+                score = 1;
+            }
+        }
+        if (score > selectedScore) {
+            selectedScore = score;
+            physicalDevice_ = vk::raii::PhysicalDevice(instance_, *candidate);
+            capabilities_ = std::move(caps);
+            plan_ = std::make_unique<DevicePlan>(
+                std::get<DevicePlan>(std::move(resolution))
+            );
+        }
     }
-
-    // query for Vulkan 1.3 features
-    vk::StructureChain featureChain{
-        vk::PhysicalDeviceFeatures2{},
-        vk::PhysicalDeviceVulkan11Features{.shaderDrawParameters = true},
-        vk::PhysicalDeviceVulkan13Features{.synchronization2 = true, .dynamicRendering = true},
-        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT{.extendedDynamicState = true}
-    };
-
-    // create a Device
-    float queuePriority = 0.5f;
-    vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
-        .queueFamilyIndex = queueIndex,
+    if (!plan_) {
+        throw std::runtime_error("No device meets requirements:\n" + failures);
+    }
+    float priority = 1.f;
+    vk::DeviceQueueCreateInfo queueInfo{
+        .queueFamilyIndex = plan_->queueFamilyIndex,
         .queueCount = 1,
-        .pQueuePriorities = &queuePriority
+        .pQueuePriorities = &priority
     };
-    vk::DeviceCreateInfo deviceCreateInfo{
-        .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
-        .queueCreateInfoCount = 1,
-        .pQueueCreateInfos = &deviceQueueCreateInfo,
-        .enabledExtensionCount =
-            static_cast<uint32_t>(requiredDeviceExtension.size()),
-        .ppEnabledExtensionNames = requiredDeviceExtension.data()
+    auto extensionNames = pointers(plan_->enabledExtensions);
+    vk::DeviceCreateInfo info{
+        .pNext = &plan_->featureChain.get<vk::PhysicalDeviceFeatures2>()
     };
-
-    this->device = vk::raii::Device(physicalDevice, deviceCreateInfo);
-    this->queueFamilyIndex = queueIndex;
-    this->queue = vk::raii::Queue(device, queueFamilyIndex, 0);
+    info.setQueueCreateInfos(queueInfo).setPEnabledExtensionNames(
+        extensionNames
+    );
+    device_ = physicalDevice_.createDevice(info);
+    queue_ = device_.getQueue(plan_->queueFamilyIndex, 0);
+    commandPool_ = device_.createCommandPool(
+        {.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+         .queueFamilyIndex = plan_->queueFamilyIndex}
+    );
+    descriptorPool_ = createDescriptorPool(device_);
+    VmaVulkanFunctions functions{};
+    functions.vkGetInstanceProcAddr =
+        instance_.getDispatcher()->vkGetInstanceProcAddr;
+    functions.vkGetDeviceProcAddr =
+        device_.getDispatcher()->vkGetDeviceProcAddr;
+    VmaAllocatorCreateInfo allocatorInfo{};
+    if (plan_->enabledExtension(vk::EXTMemoryBudgetExtensionName)) {
+        allocatorInfo.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+    }
+    allocatorInfo.physicalDevice = *physicalDevice_;
+    allocatorInfo.device = *device_;
+    allocatorInfo.instance = *instance_;
+    allocatorInfo.vulkanApiVersion = vk::ApiVersion13;
+    allocatorInfo.pVulkanFunctions = &functions;
+    allocator_ = VmaAllocatorWrapper(new VmaAllocator{});
+    if (vmaCreateAllocator(&allocatorInfo, allocator_.get()) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create VMA allocator");
+    }
 }
 
-void VulkanContext::initVmaAllocator() {
-    VmaVulkanFunctions functions = {
-        .vkGetInstanceProcAddr =
-            instance.getDispatcher()
-                ->vkGetInstanceProcAddr,
-        .vkGetDeviceProcAddr =
-            device.getDispatcher()
-                ->vkGetDeviceProcAddr,
-    };
-    VmaAllocatorCreateFlags flags =
-        VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
-    VmaAllocatorCreateInfo info{
-        .flags = flags,
-        .physicalDevice = *physicalDevice,
-        .device = *device,
-        .pVulkanFunctions = &functions,
-        .instance = *instance,
-        .vulkanApiVersion = VK_API_VERSION_1_3,
-    };
-    this->allocator = VmaAllocatorWrapper(new VmaAllocator());
-    if (vmaCreateAllocator(&info, allocator.get()) != VK_SUCCESS) {
-        throw std::runtime_error("Error creating VMA allocator");
+void VulkanContext::submitAndWait(
+    const std::function<void(vk::raii::CommandBuffer&)>& record
+) const {
+    auto buffers = device_.allocateCommandBuffers({
+        .commandPool = *commandPool_,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1,
+    });
+    auto& cmd = buffers.front();
+    cmd.begin({
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+    });
+    record(cmd);
+    cmd.end();
+    vk::raii::Fence completion{device_, vk::FenceCreateInfo{}};
+    queue_.submit(vk::SubmitInfo{}.setCommandBuffers(*cmd), *completion);
+    if (device_.waitForFences(*completion, vk::True, UINT64_MAX) !=
+        vk::Result::eSuccess) {
+        throw std::runtime_error("Failed to wait for command submission");
     }
 }

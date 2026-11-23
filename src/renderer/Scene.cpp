@@ -37,7 +37,7 @@ Scene::Scene(std::vector<Ref<RenderObject>>& objs, AppState& state) : state(stat
 void Scene::render(
     const vk::raii::PipelineLayout& pipelineLayout,
     vk::raii::CommandBuffer& cmd,
-    DynamicBuffer& ub,
+    Buffer& ub,
     float ratio
 ) {
     camera.aspectRatio = ratio;
@@ -45,7 +45,7 @@ void Scene::render(
         glm::transpose(view.calcMat()),
         glm::transpose(camera.calcMat())
     };
-    ub.update(objectAsRawBytes(ubo));
+    ub.write(objectAsRawBytes(ubo));
     for (const RenderObject& obj : objects) {
         obj.render(pipelineLayout, cmd);
     }

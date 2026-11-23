@@ -10,7 +10,7 @@ struct FrameContext;
 struct ForwardRenderLayout;
 struct ImguiApp;
 struct SurfaceImage;
-struct VulkanContext;
+class VulkanContext;
 
 struct ForwardPassContext {
     VulkanContext& context;

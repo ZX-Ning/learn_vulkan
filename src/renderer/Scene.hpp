@@ -8,7 +8,7 @@
 #include "../utils.hpp"
 
 struct Model;
-struct DynamicBuffer;
+class Buffer;
 struct AppState;
 
 struct RenderObject {
@@ -34,7 +34,7 @@ struct Scene {
     void render(
         const vk::raii::PipelineLayout&,
         vk::raii::CommandBuffer& cmd,
-        DynamicBuffer& ub,
+        Buffer& ub,
         float ratio
     );
     void resetCamera();
