@@ -34,19 +34,20 @@ Mesh createMesh(VulkanContext& context) {
     };
 }
 
-Material createMaterial(
-    VulkanContext& context,
+}  // namespace
+
+std::shared_ptr<vk::raii::Pipeline> ModelLoader::createSimpleCubePipeline(
+    const VulkanContext& context,
     const ForwardRenderLayout& layout,
-    Image& img, vk::Format colorFormat
+    vk::Format colorFormat
 ) {
-    // create render pipeline
     auto shader = decodeSpirv(readFile(Consts::SHADER_SPV_PATH));
     vk::VertexInputBindingDescription bindingDescs[] = {
         SimpleVertex::bindingDescription()
     };
     auto attributeDescs = SimpleVertex::attributeDescriptions();
     std::array colorTargets{ColorTargetDesc{.format = colorFormat}};
-    auto pipeline = std::make_shared<vk::raii::Pipeline>(createGraphicsPipeline(
+    return std::make_shared<vk::raii::Pipeline>(createGraphicsPipeline(
         context.device(),
         GraphicsPipelineDesc{
             .layout = *layout.pipelineLayout,
@@ -69,6 +70,15 @@ Material createMaterial(
             .depthFormat = vk::Format::eD32Sfloat
         }
     ));
+}
+
+namespace {
+Material createMaterial(
+    VulkanContext& context,
+    const ForwardRenderLayout& layout,
+    Image& img, vk::Format colorFormat
+) {
+    auto pipeline = ModelLoader::createSimpleCubePipeline(context, layout, colorFormat);
 
     // create texture (with sampler)
 

@@ -1,11 +1,9 @@
 #include "Swapchain.hpp"
 
-#include <vulkan/vulkan_enums.hpp>
-#include <vulkan/vulkan_raii.hpp>
+#include <algorithm>
+#include <stdexcept>
 
-#include "Texture.hpp"
 #include "VulkanContext.hpp"
-#include "VulkanUtils.hpp"
 
 namespace {
 vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& formats) {
@@ -56,40 +54,25 @@ uint32_t chooseSwapMinImageCount(const vk::SurfaceCapabilitiesKHR& surfaceCapabi
     return minImageCount;
 }
 
-vk::PresentModeKHR chooseSwapPresentMode(
-    const std::vector<vk::PresentModeKHR>& availablePresentModes
-) {
-    // for (const auto& presentMode : availablePresentModes) {
-    //     if (presentMode == vk::PresentModeKHR::eMailbox) {
-    //         return vk::PresentModeKHR::eMailbox;
-    //     }
-    // }
-    return vk::PresentModeKHR::eFifo;
-    // return vk::PresentModeKHR::eImmediate;
-}
-
 }  // namespace
 
-void SwapChain::init(const VulkanContext& context, Size2D<uint32_t> size) {
+SwapChain::SwapChain(
+    const VulkanContext& context,
+    vk::Extent2D drawableExtent,
+    vk::SwapchainKHR oldSwapchain
+) {
     auto surfaceCapabilities =
         context.physicalDevice().getSurfaceCapabilitiesKHR(context.surface());
-    this->extent = chooseSwapExtent(
-        surfaceCapabilities,
-        vk::Extent2D{size.width, size.height}
+    extent = chooseSwapExtent(surfaceCapabilities, drawableExtent);
+    surfaceFormat = chooseSwapSurfaceFormat(
+        context.physicalDevice().getSurfaceFormatsKHR(context.surface())
     );
-    this->surfaceFormat = chooseSwapSurfaceFormat(
-        context
-            .physicalDevice()
-            .getSurfaceFormatsKHR(context.surface())
-    );
-    minImageCount = chooseSwapMinImageCount(
-        context
-            .physicalDevice()
-            .getSurfaceCapabilitiesKHR(context.surface())
-    );
+    if (extent.width == 0 || extent.height == 0) {
+        return;
+    }
     vk::SwapchainCreateInfoKHR swapChainCreateInfo{
         .surface = context.surface(),
-        .minImageCount = minImageCount,
+        .minImageCount = chooseSwapMinImageCount(surfaceCapabilities),
         .imageFormat = surfaceFormat.format,
         .imageColorSpace = surfaceFormat.colorSpace,
         .imageExtent = extent,
@@ -98,16 +81,14 @@ void SwapChain::init(const VulkanContext& context, Size2D<uint32_t> size) {
         .imageSharingMode = vk::SharingMode::eExclusive,
         .preTransform = surfaceCapabilities.currentTransform,
         .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
-        .presentMode = chooseSwapPresentMode(
-            context
-                .physicalDevice()
-                .getSurfacePresentModesKHR(context.surface())
-        ),
-        .clipped = true
+        .presentMode = vk::PresentModeKHR::eFifo,
+        .clipped = true,
+        .oldSwapchain = oldSwapchain
     };
 
-    this->vkSwapChain = vk::raii::SwapchainKHR{context.device(), swapChainCreateInfo};
+    vkSwapChain = context.device().createSwapchainKHR(swapChainCreateInfo);
     auto swapChainImages = vkSwapChain.getImages();
+    images.reserve(swapChainImages.size());
 
     vk::ImageViewCreateInfo imageViewCreateInfo{
         .viewType = vk::ImageViewType::e2D,
@@ -121,72 +102,8 @@ void SwapChain::init(const VulkanContext& context, Size2D<uint32_t> size) {
         }
     };
 
-    for (auto& image : swapChainImages) {
+    for (auto image : swapChainImages) {
         imageViewCreateInfo.image = image;
-        this->images.emplace_back(
-            // vk::Image is a non-owning handle; copy it instead of moving.
-            image,
-            vk::raii::ImageView{context.device(), imageViewCreateInfo},
-            vk::raii::Semaphore{context.device(), vk::SemaphoreCreateInfo{}}
-        );
+        images.push_back({image, context.device().createImageView(imageViewCreateInfo)});
     }
-};
-
-SwapChain::SwapChain(const VulkanContext& context, Size2D<uint32_t> size) {
-    init(context, size);
-}
-
-void SwapChain::recreate(const VulkanContext& context, Size2D<uint32_t> size) {
-    context.device().waitIdle();
-    // Don't use release, which does not delete the resource.
-    vkSwapChain = nullptr;
-    extent = vk::Extent2D{0, 0},
-    images.clear();
-
-    init(context, size);
-};
-
-uint32_t SwapChain::acquireNextImage(vk::raii::Semaphore& semaphore) {
-    auto [result, imageIndex] = this->vkSwapChain.acquireNextImage(
-        UINT64_MAX,
-        *semaphore,
-        nullptr
-    );
-
-    if (result == vk::Result::eErrorOutOfDateKHR) {
-        throw SwapChainOutOfDateError{};
-    }
-    if (result != vk::Result::eSuccess &&
-        result != vk::Result::eSuboptimalKHR) {
-        throw std::runtime_error("failed to acquire swap chain image!");
-    }
-    return imageIndex;
-}
-
-void SurfaceImage::transitionToColorAttachment(vk::raii::CommandBuffer& cmd) {
-    transitionImageLayout(
-        cmd,
-        this->image,
-        vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eColorAttachmentOptimal,
-        vk::PipelineStageFlagBits2::eTopOfPipe,
-        {},
-        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        vk::AccessFlagBits2::eColorAttachmentWrite,
-        vk::ImageAspectFlagBits::eColor
-    );
-}
-
-void SurfaceImage::transitionToPresent(vk::raii::CommandBuffer& cmd) {
-    transitionImageLayout(
-        cmd,
-        this->image,
-        vk::ImageLayout::eColorAttachmentOptimal,
-        vk::ImageLayout::ePresentSrcKHR,
-        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        vk::AccessFlagBits2::eColorAttachmentWrite,
-        vk::PipelineStageFlagBits2::eBottomOfPipe,
-        {},
-        vk::ImageAspectFlagBits::eColor
-    );
 }

@@ -15,7 +15,9 @@ void checkVma(VkResult result, const char* operation) {
 Buffer::Buffer(VmaAllocator allocator, const BufferDesc& desc)
     : allocator_(allocator), desc_(desc) {
     if (!allocator || !desc.size || !desc.usage) {
-        throw std::invalid_argument("Buffer requires an allocator, nonzero size and usage");
+        throw std::invalid_argument(
+            "Buffer requires an allocator, nonzero size and usage"
+        );
     }
     vk::BufferCreateInfo info{
         .size = desc.size,
@@ -26,8 +28,7 @@ Buffer::Buffer(VmaAllocator allocator, const BufferDesc& desc)
     allocationInfo.usage = VMA_MEMORY_USAGE_AUTO;
     switch (desc.memory) {
         case MemoryAccess::Device:
-            allocationInfo.usage =
-                VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+            allocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
             break;
         case MemoryAccess::Upload:
             allocationInfo.flags =
@@ -43,7 +44,12 @@ Buffer::Buffer(VmaAllocator allocator, const BufferDesc& desc)
     }
     VkBuffer buffer;
     VmaAllocationInfo result{};
-    checkVma(vmaCreateBuffer(allocator_, &*info, &allocationInfo, &buffer, &allocation_, &result), "Failed to allocate buffer");
+    checkVma(
+        vmaCreateBuffer(
+            allocator_, &*info, &allocationInfo, &buffer, &allocation_, &result
+        ),
+        "Failed to allocate buffer"
+    );
     buffer_ = buffer;
     mapped_ = result.pMappedData;
 }
@@ -76,7 +82,9 @@ Buffer& Buffer::operator=(Buffer&& other) noexcept {
 
 void Buffer::release() noexcept {
     if (buffer_) {
-        vmaDestroyBuffer(allocator_, static_cast<VkBuffer>(buffer_), allocation_);
+        vmaDestroyBuffer(
+            allocator_, static_cast<VkBuffer>(buffer_), allocation_
+        );
     }
     buffer_ = nullptr;
     allocation_ = nullptr;
@@ -98,17 +106,10 @@ void Buffer::write(std::span<const uint8_t> data, vk::DeviceSize offset) {
         return;
     }
     std::memcpy(
-        static_cast<uint8_t*>(mapped_) + offset,
-        data.data(),
-        data.size_bytes()
+        static_cast<uint8_t*>(mapped_) + offset, data.data(), data.size_bytes()
     );
     checkVma(
-        vmaFlushAllocation(
-            allocator_,
-            allocation_,
-            offset,
-            data.size_bytes()
-        ),
+        vmaFlushAllocation(allocator_, allocation_, offset, data.size_bytes()),
         "Failed to flush buffer memory"
     );
 }
@@ -123,10 +124,7 @@ void Buffer::read(std::span<uint8_t> data, vk::DeviceSize offset) const {
     }
     checkVma(
         vmaInvalidateAllocation(
-            allocator_,
-            allocation_,
-            offset,
-            data.size_bytes()
+            allocator_, allocation_, offset, data.size_bytes()
         ),
         "Failed to invalidate buffer memory"
     );

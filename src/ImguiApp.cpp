@@ -3,20 +3,33 @@
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
 
+#include <algorithm>
 #include <vulkan/vulkan_raii.hpp>
 
 #include "AppState.hpp"
 #include "Consts.hpp"
 #include "renderer/Scene.hpp"
 #include "WindowApp.hpp"
-#include "core/Swapchain.hpp"
 #include "core/VulkanContext.hpp"
+
+namespace {
+ImGui_ImplVulkan_PipelineInfo pipelineInfo(const vk::Format& format) {
+    const vk::PipelineRenderingCreateInfo rendering{
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &format,
+        .depthAttachmentFormat = vk::Format::eD32Sfloat
+    };
+    ImGui_ImplVulkan_PipelineInfo info{};
+    info.PipelineRenderingCreateInfo = *rendering;
+    return info;
+}
+}  // namespace
 
 void ImguiApp::initImguiForVk(
     WindowApp& windowApp,
     const VulkanContext& context,
     vk::Format format,
-    uint32_t imageCount
+    uint32_t frameCount
 ) {
     ImGuiIO* imguiIo = &ImGui::GetIO();
     imguiIo->ConfigFlags |= ImGuiConfigFlags_IsSRGB;
@@ -48,12 +61,6 @@ void ImguiApp::initImguiForVk(
         style->ScaleAllSizes(scale);
     }
 
-    vk::PipelineRenderingCreateInfoKHR pipelineInfo{
-        .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &format,
-        .depthAttachmentFormat = vk::Format::eD32Sfloat
-    };
-
     auto vert = readFile(Consts::SHADER_IMGUI_VERT_PATH);
     vk::ShaderModuleCreateInfo vertInfo{
         .codeSize = getVectorSize(vert),
@@ -65,6 +72,7 @@ void ImguiApp::initImguiForVk(
         .pCode = reinterpret_cast<uint32_t*>(frag.data())
     };
 
+    const auto renderBufferCount = std::max(2u, frameCount);
     ImGui_ImplVulkan_InitInfo initInfo{
         .ApiVersion = VK_API_VERSION_1_3,
         .Instance = *context.instance(),
@@ -73,11 +81,9 @@ void ImguiApp::initImguiForVk(
         .QueueFamily = context.queueFamilyIndex(),
         .Queue = *context.queue(),
         .DescriptorPoolSize = 0xff,
-        .MinImageCount = imageCount,
-        .ImageCount = imageCount,
-        .PipelineInfoMain = {
-            .PipelineRenderingCreateInfo = *pipelineInfo,
-        },
+        .MinImageCount = renderBufferCount,
+        .ImageCount = renderBufferCount,
+        .PipelineInfoMain = pipelineInfo(format),
         .UseDynamicRendering = true,
         .CustomShaderVertCreateInfo = vertInfo,
         .CustomShaderFragCreateInfo = fragInfo
@@ -211,9 +217,19 @@ void ImguiApp::renderVk(ImDrawData* drawData, vk::raii::CommandBuffer& cmd) {
     ;
 }
 
-ImguiApp::ImguiApp(WindowApp& window, VulkanContext& context, SwapChain& swapChain) {
+ImguiApp::ImguiApp(
+    WindowApp& window,
+    const VulkanContext& context,
+    vk::Format colorFormat,
+    uint32_t frameCount
+) {
     initForSdl(window);
-    initImguiForVk(window, context, swapChain.surfaceFormat.format, swapChain.images.size());
+    initImguiForVk(window, context, colorFormat, frameCount);
+}
+
+void ImguiApp::setColorFormat(vk::Format colorFormat) {
+    auto info = pipelineInfo(colorFormat);
+    ImGui_ImplVulkan_CreateMainPipeline(&info);
 }
 
 void ImguiApp::initForSdl(WindowApp& windowApp) {

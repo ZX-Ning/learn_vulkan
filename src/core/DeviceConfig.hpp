@@ -9,10 +9,11 @@
 // Application-level capability bundles. Every feature in a bundle must be
 // supported; optional bundles are enabled completely or left disabled.
 enum class DeviceCapability {
-    Synchronization,        // synchronization2
-    Rendering,              // synchronization2 + dynamicRendering + shaderDrawParameters
-    Int8Storage,            // int8 arithmetic + 8-bit storage/uniform-buffer access
-    Float16Storage,         // float16 arithmetic + 16-bit storage/uniform-buffer access
+    Synchronization,  // synchronization2
+    Rendering,    // synchronization2 + dynamicRendering + shaderDrawParameters
+    Int8Storage,  // int8 arithmetic + 8-bit storage/uniform-buffer access
+    Float16Storage,  // float16 arithmetic + 16-bit storage/uniform-buffer
+                     // access
     DeviceScopeMemoryModel  // Vulkan memory model + device scope
 };
 const char* capabilityName(DeviceCapability capability);
@@ -27,10 +28,14 @@ struct DeviceCapabilities {
     bool supports(DeviceCapability capability) const;
     bool supportsExtension(const std::string& name) const;
 };
-DeviceCapabilities queryDeviceCapabilities(const vk::raii::PhysicalDevice& device);
+
+DeviceCapabilities queryDeviceCapabilities(
+    const vk::raii::PhysicalDevice& device
+);
 
 // Vulkan-Hpp owns and links the fixed set of feature structures. Add newly
-// supported extension types here when needed; optional nodes start unlinked in DevicePlan.
+// supported extension types here when needed; optional nodes start unlinked in
+// DevicePlan.
 using DeviceFeatureChain = vk::StructureChain<
     vk::PhysicalDeviceFeatures2,
     vk::PhysicalDeviceVulkan11Features,
@@ -42,11 +47,15 @@ struct ExtensionRequest {
     std::string name;
     bool required = true;
     // Return an empty string when supported, otherwise a diagnostic reason.
-    std::function<std::string(const vk::raii::PhysicalDevice&, const DeviceCapabilities&)> check;
-    // Modify fields through get<T>() and relink<T>() for supported optional nodes.
-    // Do not assign whole structures, which would overwrite their pNext links.
+    std::function<
+        std::string(const vk::raii::PhysicalDevice&, const DeviceCapabilities&)>
+        check;
+    // Modify fields through get<T>() and relink<T>() for supported optional
+    // nodes. Do not assign whole structures, which would overwrite their pNext
+    // links.
     std::function<void(DeviceFeatureChain&)> enable;
 };
+
 struct DeviceRequirements {
     vk::QueueFlags queueFlags = vk::QueueFlagBits::eCompute;
     bool present = false;
@@ -57,7 +66,8 @@ struct DeviceRequirements {
 
 struct DevicePlan {
     DevicePlan() {
-        featureChain.unlink<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+        featureChain
+            .unlink<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
     }
     uint32_t queueFamilyIndex = ~0u;
     std::vector<DeviceCapability> enabledCapabilities;
@@ -69,5 +79,10 @@ struct DevicePlan {
 };
 using DeviceErrors = std::vector<std::string>;
 using DeviceResolution = std::variant<DevicePlan, DeviceErrors>;
-DeviceResolution resolveDevice(const vk::raii::PhysicalDevice& device, const DeviceCapabilities& capabilities, const DeviceRequirements& requirements, vk::SurfaceKHR surface = {});
+DeviceResolution resolveDevice(
+    const vk::raii::PhysicalDevice& device,
+    const DeviceCapabilities& capabilities,
+    const DeviceRequirements& requirements,
+    vk::SurfaceKHR surface = {}
+);
 #endif

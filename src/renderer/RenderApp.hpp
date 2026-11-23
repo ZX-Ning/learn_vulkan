@@ -1,62 +1,41 @@
 #ifndef RENDER_HPP
 #define RENDER_HPP
 
-// c++ std libs
 #include <cstdint>
-#include <memory>
 #include <vector>
 
-// vulkan-hpp headers
-#include <vulkan/vulkan_core.h>
-
-#include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_raii.hpp>
-#include <vulkan/vulkan_structs.hpp>
-
-// project
-#include "../AppState.hpp"
-#include "../ImguiApp.hpp"
-#include "../core/Buffer.hpp"
-#include "../utils.hpp"
 #include "ForwardPass.hpp"
-#include "ForwardRenderLayout.hpp"
 #include "FrameContext.hpp"
 
-// forward declaration
-struct WindowApp;
+struct AppState;
+struct ForwardRenderLayout;
+struct ImguiApp;
+struct PresentFrame;
 class VulkanContext;
-struct SwapChain;
-struct Scene;
-////////////////////////
 
-struct RenderApp {
-private:
-    AppState& state;
-    VulkanContext& context;
-    ForwardRenderLayout& layout;
-    WindowApp& windowApp;
-    SwapChain& swapChain;
-    ImguiApp& imgui;
-    ForwardPass forwardPass;
-    std::vector<FrameContext> frames;
-    uint32_t frameIndex = 0;
-    void recreateSwapChainResources(Size2D<uint32_t> size);
-
+class RenderApp {
 public:
-    bool framebufferResized = false;
     RenderApp(
         AppState& state,
         VulkanContext& context,
         ForwardRenderLayout& layout,
-        WindowApp& windowApp,
-        SwapChain& swapChain,
-        ImguiApp& imgui
+        ImguiApp& imgui,
+        uint32_t frameCount
     );
-    ~RenderApp();
-    void init();
-    void run();
-    void drawFrame();
-    DISABLE_COPY(RenderApp)
+    RenderApp(const RenderApp&) = delete;
+    RenderApp& operator=(const RenderApp&) = delete;
+
+    void recordFrame(const PresentFrame& frame);
+
+private:
+    AppState& state_;
+    VulkanContext& context_;
+    ForwardRenderLayout& layout_;
+    ImguiApp& imgui_;
+    uint32_t frameCount_;
+    ForwardPass forwardPass_;
+    std::vector<FrameContext> frames_;
+    vk::Extent2D resourceExtent_{};
 };
 
 #endif  // RENDER_HPP

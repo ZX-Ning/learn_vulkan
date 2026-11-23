@@ -9,11 +9,7 @@
 #include <vulkan/vulkan_raii.hpp>
 
 // This selects a memory access policy, independently of Vulkan buffer usage.
-enum class MemoryAccess {
-    Device,
-    Upload,
-    Readback
-};
+enum class MemoryAccess { Device, Upload, Readback };
 
 struct BufferDesc {
     vk::DeviceSize size;

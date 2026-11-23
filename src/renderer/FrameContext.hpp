@@ -2,20 +2,17 @@
 #define FRAMECONTEXT_HPP
 
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan_raii.hpp>
 
 #include "../core/Texture.hpp"
-#include "../utils.hpp"
 
 class Buffer;
 class VulkanContext;
 
 struct FrameContext {
-    vk::raii::CommandBuffer cmdBuffer{nullptr};
-    vk::raii::Semaphore presentComplete{nullptr};
-    vk::raii::Fence fences{nullptr};
     vk::raii::DescriptorSet sceneDescriptorSet{nullptr};
     std::array<std::unique_ptr<Texture>, 2> pingpongTexture;
     std::shared_ptr<Buffer> sceneUniformBuf;
@@ -23,20 +20,17 @@ struct FrameContext {
 
     FrameContext(
         const VulkanContext& ctx,
-        vk::raii::CommandBuffer&& commandBuffer,
         vk::raii::DescriptorSet&& sceneSet,
-        Size2D<uint32_t> size
+        vk::Extent2D extent
     );
 
-    void reset(const vk::raii::Device& device);
-    void wait(const vk::raii::Device& device);
-    void recreateTextures(const VulkanContext& ctx, Size2D<uint32_t> size);
+    void recreateTextures(const VulkanContext& ctx, vk::Extent2D extent);
     void transitionDepthToAttachment(vk::raii::CommandBuffer& cmd);
 
     static std::vector<FrameContext> createFrameInFlights(
         const VulkanContext& ctx,
-        int fif,
-        Size2D<uint32_t> size,
+        uint32_t frameCount,
+        vk::Extent2D extent,
         vk::DescriptorSetLayout sceneSetLayout
     );
 };

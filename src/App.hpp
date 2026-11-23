@@ -4,8 +4,9 @@
 #include <memory>
 
 #include "AppState.hpp"
+#include "ImguiApp.hpp"
 #include "WindowApp.hpp"
-#include "core/Swapchain.hpp"
+#include "core/Presenter.hpp"
 #include "core/Texture.hpp"
 #include "core/VulkanContext.hpp"
 #include "renderer/ForwardRenderLayout.hpp"
@@ -18,13 +19,14 @@ private:
     std::unique_ptr<AppState> state;
     std::unique_ptr<WindowApp> window;
     std::unique_ptr<VulkanContext> context;
-    std::unique_ptr<SwapChain> swapchain;
+    std::unique_ptr<Presenter> presenter;
     std::unique_ptr<ImguiApp> imgui;
     std::unique_ptr<ForwardRenderLayout> forwardLayout;
     Model defaultModel;
     std::unique_ptr<RenderObject> defaultRenderobj;
     std::unique_ptr<Scene> scene;
     std::unique_ptr<RenderApp> renderApp;
+    vk::Format colorFormat = vk::Format::eUndefined;
 
     void setupCallback();
     void onDraw();

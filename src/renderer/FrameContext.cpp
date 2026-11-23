@@ -1,6 +1,5 @@
 #include "FrameContext.hpp"
 
-#include <cassert>
 #include <utility>
 
 #include "../core/Buffer.hpp"
@@ -12,20 +11,16 @@
 
 FrameContext::FrameContext(
     const VulkanContext& ctx,
-    vk::raii::CommandBuffer&& commandBuffer,
     vk::raii::DescriptorSet&& sceneSet,
-    Size2D<uint32_t> size
+    vk::Extent2D extent
 )
-    : cmdBuffer(std::move(commandBuffer)),
-      presentComplete(ctx.device(), vk::SemaphoreCreateInfo{}),
-      fences(ctx.device(), vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled}),
-      sceneDescriptorSet(std::move(sceneSet)) {
+    : sceneDescriptorSet(std::move(sceneSet)) {
     sceneUniformBuf = std::make_shared<Buffer>(ctx.allocator(), BufferDesc{
         .size = sizeof(DefaultSceneUBO),
         .usage = vk::BufferUsageFlagBits::eUniformBuffer,
         .memory = MemoryAccess::Upload
     });
-    recreateTextures(ctx, size);
+    recreateTextures(ctx, extent);
 
     vk::DescriptorBufferInfo bufferInfo{
         .buffer = sceneUniformBuf->handle(),
@@ -45,24 +40,11 @@ FrameContext::FrameContext(
     ctx.device().updateDescriptorSets(descriptorWrites, {});
 }
 
-void FrameContext::reset(const vk::raii::Device& device) {
-    device.resetFences(*fences);
-}
-
-void FrameContext::wait(const vk::raii::Device& device) {
-    vk::Result fenceResult = device.waitForFences(
-        *fences, vk::True, UINT64_MAX
-    );
-    if (fenceResult != vk::Result::eSuccess) {
-        throw std::runtime_error("failed to wait for fence!");
-    }
-}
-
-void FrameContext::recreateTextures(const VulkanContext& ctx, Size2D<uint32_t> size) {
-    vk::Extent3D extent{size.width, size.height, 1};
-    depthTexture = createDepthTexture(ctx, extent);
-    pingpongTexture[0] = createPingPongTexture(ctx, extent);
-    pingpongTexture[1] = createPingPongTexture(ctx, extent);
+void FrameContext::recreateTextures(const VulkanContext& ctx, vk::Extent2D extent) {
+    vk::Extent3D imageExtent{extent.width, extent.height, 1};
+    depthTexture = createDepthTexture(ctx, imageExtent);
+    pingpongTexture[0] = createPingPongTexture(ctx, imageExtent);
+    pingpongTexture[1] = createPingPongTexture(ctx, imageExtent);
 }
 
 void FrameContext::transitionDepthToAttachment(vk::raii::CommandBuffer& cmd) {
@@ -75,46 +57,30 @@ void FrameContext::transitionDepthToAttachment(vk::raii::CommandBuffer& cmd) {
         {},
         vk::PipelineStageFlagBits2::eEarlyFragmentTests |
             vk::PipelineStageFlagBits2::eLateFragmentTests,
-        vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+        vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+            vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
         vk::ImageAspectFlagBits::eDepth
     );
 }
 
 std::vector<FrameContext> FrameContext::createFrameInFlights(
     const VulkanContext& ctx,
-    int fif,
-    Size2D<uint32_t> size,
+    uint32_t frameCount,
+    vk::Extent2D extent,
     vk::DescriptorSetLayout sceneSetLayout
 ) {
-    vk::CommandBufferAllocateInfo allocInfo{
-        .commandPool = ctx.commandPool(),
-        .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = static_cast<uint32_t>(fif)
-    };
-    vk::raii::CommandBuffers commandbufs{ctx.device(), allocInfo};
-
-    std::vector<vk::DescriptorSetLayout> desSetLayouts(
-        fif, sceneSetLayout
-    );
+    std::vector<vk::DescriptorSetLayout> descriptorLayouts(frameCount, sceneSetLayout);
     vk::DescriptorSetAllocateInfo setAllocInfo{
         .descriptorPool = ctx.descriptorPool(),
-        .descriptorSetCount = static_cast<uint32_t>(desSetLayouts.size()),
-        .pSetLayouts = desSetLayouts.data()
+        .descriptorSetCount = frameCount,
+        .pSetLayouts = descriptorLayouts.data()
     };
-    vk::raii::DescriptorSets sets{ctx.device(), setAllocInfo};
-
-    assert(commandbufs.size() == static_cast<size_t>(fif));
-    assert(sets.size() == static_cast<size_t>(fif));
+    auto sets = ctx.device().allocateDescriptorSets(setAllocInfo);
 
     std::vector<FrameContext> frames;
-    frames.reserve(fif);
-    for (int i = 0; i < fif; i++) {
-        frames.emplace_back(
-            ctx,
-            std::move(commandbufs[i]),
-            std::move(sets[i]),
-            size
-        );
+    frames.reserve(frameCount);
+    for (auto& set : sets) {
+        frames.emplace_back(ctx, std::move(set), extent);
     }
 
     return frames;

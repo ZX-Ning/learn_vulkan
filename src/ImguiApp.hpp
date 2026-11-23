@@ -13,14 +13,18 @@ struct WindowApp;
 struct AppState;
 class VulkanContext;
 struct Scene;
-struct SwapChain;
 struct SDL_Window;
 namespace vk::raii {
 class CommandBuffer;
 }
 
 struct ImguiApp {
-    explicit ImguiApp(WindowApp& window, VulkanContext& context, SwapChain& swapChain);
+    ImguiApp(
+        WindowApp& window,
+        const VulkanContext& context,
+        vk::Format colorFormat,
+        uint32_t frameCount
+    );
     void initForSdl(WindowApp& windowApp);
     static constexpr int FPS_UPDATE_INTERVAL_MS = 200;
     uint64_t lastShowFpsTime;
@@ -29,8 +33,9 @@ struct ImguiApp {
         WindowApp& windowApp,
         const VulkanContext& context,
         vk::Format format,
-        uint32_t imageCount
+        uint32_t frameCount
     );
+    void setColorFormat(vk::Format colorFormat);
     ImDrawData* drawImgui(AppState& state);
     bool wantMouse();
     void renderVk(ImDrawData* drawData, vk::raii::CommandBuffer& cmd);

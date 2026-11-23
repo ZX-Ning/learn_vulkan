@@ -1,24 +1,19 @@
 #ifndef FORWARDPASS_HPP
 #define FORWARDPASS_HPP
 
-#include <vulkan/vulkan.hpp>
-
-#include "../utils.hpp"
+#include <vulkan/vulkan_raii.hpp>
 
 struct AppState;
 struct FrameContext;
 struct ForwardRenderLayout;
 struct ImguiApp;
-struct SurfaceImage;
-class VulkanContext;
 
 struct ForwardPassContext {
-    VulkanContext& context;
+    vk::raii::CommandBuffer& cmd;
     ForwardRenderLayout& layout;
     FrameContext& frame;
-    SurfaceImage& target;
+    vk::ImageView colorView;
     vk::Extent2D extent;
-    Size2D<int> windowSize;
     AppState& state;
     ImguiApp& imgui;
 };
