@@ -1,18 +1,15 @@
 #ifndef SCENE_HPP
 #define SCENE_HPP
 
-#include <glm/gtc/quaternion.hpp>
-#include <vulkan/vulkan_raii.hpp>
+#include <memory>
+#include <vector>
 
 #include "../Camera.hpp"
-#include "../utils.hpp"
 
 struct Model;
-class Buffer;
-struct AppState;
 
 struct RenderObject {
-    Model& model;
+    std::shared_ptr<const Model> model;
     glm::fvec3 position;
     glm::fvec3 scale;
     // rotation
@@ -20,23 +17,14 @@ struct RenderObject {
     glm::vec3 axis;
 
     glm::fmat4x4 calcModelMatrix() const;
-    void render(const vk::raii::PipelineLayout&, vk::raii::CommandBuffer& cmd) const;
 };
 
 struct Scene {
-    std::vector<Ref<RenderObject>> objects;
+    std::vector<RenderObject> objects;
     View view;
     Camera camera;
-    AppState& state;
 
-    Scene(std::vector<Ref<RenderObject>>& objs, AppState& state);
-
-    void render(
-        const vk::raii::PipelineLayout&,
-        vk::raii::CommandBuffer& cmd,
-        Buffer& ub,
-        float ratio
-    );
+    Scene();
     void resetCamera();
 };
 

@@ -1,18 +1,33 @@
 #include "Presenter.hpp"
 
+#include <SDL3/SDL_error.h>
+#include <SDL3/SDL_video.h>
+
 #include <stdexcept>
 #include <utility>
 
-#include "Swapchain.hpp"
-#include "VulkanContext.hpp"
-#include "VulkanUtils.hpp"
+#include "../core/Swapchain.hpp"
+#include "../core/VulkanContext.hpp"
+#include "../core/VulkanUtils.hpp"
+
+namespace {
+vk::Extent2D getDrawableExtent(SDL_Window& window) {
+    if (SDL_GetWindowFlags(&window) & SDL_WINDOW_MINIMIZED) {
+        return {};
+    }
+    int width = 0;
+    int height = 0;
+    if (!SDL_GetWindowSizeInPixels(&window, &width, &height)) {
+        throw std::runtime_error(SDL_GetError());
+    }
+    return {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+}
+}  // namespace
 
 Presenter::Presenter(
-    const VulkanContext& context,
-    vk::Extent2D drawableExtent,
-    uint32_t framesInFlight
+    const VulkanContext& context, SDL_Window& window, uint32_t framesInFlight
 )
-    : context_(context) {
+    : context_(context), window_(window) {
     if (framesInFlight == 0) {
         throw std::invalid_argument(
             "Presenter requires at least one frame slot"
@@ -50,7 +65,7 @@ Presenter::Presenter(
              )}
         );
     }
-    recreate(drawableExtent);
+    recreate(getDrawableExtent(window_));
 }
 
 Presenter::~Presenter() = default;
@@ -86,10 +101,8 @@ void Presenter::recreate(vk::Extent2D drawableExtent) {
     drawableExtent_ = drawableExtent;
 }
 
-void Presenter::draw(
-    vk::Extent2D drawableExtent,
-    const std::function<void(const PresentFrame&)>& record
-) {
+void Presenter::draw(const std::function<void(const PresentFrame&)>& record) {
+    const auto drawableExtent = getDrawableExtent(window_);
     if (drawableExtent.width == 0 || drawableExtent.height == 0) {
         recreatePending_ = true;
         return;

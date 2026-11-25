@@ -3,33 +3,36 @@
 
 #include <memory>
 
-#include "AppState.hpp"
+#include "AppControls.hpp"
 #include "ImguiApp.hpp"
 #include "WindowApp.hpp"
-#include "core/Presenter.hpp"
-#include "core/Texture.hpp"
 #include "core/VulkanContext.hpp"
 #include "renderer/ForwardRenderLayout.hpp"
-#include "renderer/Model.hpp"
-#include "renderer/RenderApp.hpp"
+#include "renderer/Presenter.hpp"
+#include "renderer/RenderSettings.hpp"
+#include "renderer/Renderer.hpp"
 #include "renderer/Scene.hpp"
 
 struct App {
 private:
-    std::unique_ptr<AppState> state;
     std::unique_ptr<WindowApp> window;
     std::unique_ptr<VulkanContext> context;
     std::unique_ptr<Presenter> presenter;
     std::unique_ptr<ImguiApp> imgui;
     std::unique_ptr<ForwardRenderLayout> forwardLayout;
-    Model defaultModel;
-    std::unique_ptr<RenderObject> defaultRenderobj;
-    std::unique_ptr<Scene> scene;
-    std::unique_ptr<RenderApp> renderApp;
-    vk::Format colorFormat = vk::Format::eUndefined;
+    Scene scene;
+    std::unique_ptr<Renderer> renderer;
 
-    void setupCallback();
-    void onDraw();
+    AppControls controls;
+    RenderSettings renderSettings;
+    glm::vec2 mousePosition{0.f};
+    glm::vec2 mouseDelta{0.f};
+    bool mouseDown{false};
+    bool quit{false};
+
+    void processEvents();
+    void updateInput();
+    void onDraw(float frameTime);
 
 public:
     explicit App(bool validation = !IS_RELEASE);

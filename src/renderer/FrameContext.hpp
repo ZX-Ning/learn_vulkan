@@ -1,7 +1,6 @@
 #ifndef FRAMECONTEXT_HPP
 #define FRAMECONTEXT_HPP
 
-#include <array>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -14,13 +13,15 @@ class VulkanContext;
 
 struct FrameContext {
     vk::raii::DescriptorSet sceneDescriptorSet{nullptr};
-    std::array<std::unique_ptr<Texture>, 2> pingpongTexture;
+    vk::raii::DescriptorSet postSourceSet{nullptr};
+    std::unique_ptr<Texture> pingpongTexture;
     std::shared_ptr<Buffer> sceneUniformBuf;
     std::unique_ptr<Texture> depthTexture;
 
     FrameContext(
         const VulkanContext& ctx,
         vk::raii::DescriptorSet&& sceneSet,
+        vk::raii::DescriptorSet&& postSet,
         vk::Extent2D extent
     );
 
@@ -31,7 +32,8 @@ struct FrameContext {
         const VulkanContext& ctx,
         uint32_t frameCount,
         vk::Extent2D extent,
-        vk::DescriptorSetLayout sceneSetLayout
+        vk::DescriptorSetLayout sceneSetLayout,
+        vk::DescriptorSetLayout postSetLayout
     );
 };
 

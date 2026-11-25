@@ -72,9 +72,8 @@ std::unique_ptr<Texture> createPingPongTexture(
     return std::make_unique<Texture>(texture(
         ctx,
         extent,
-        vk::Format::eR16G16B16A16Sfloat,
-        vk::ImageUsageFlagBits::eColorAttachment |
-            vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage,
+        PING_PONG_COLOR_FORMAT,
+        vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
         vk::ImageAspectFlagBits::eColor,
         true
     ));

@@ -1,16 +1,23 @@
 #include "App.hpp"
 
+#include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keycode.h>
+#include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_scancode.h>
 
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/vector_angle.hpp>
 #include <print>
+#include <unordered_map>
 
 #include "Consts.hpp"
 #include "ModelLoader.hpp"
 #include "VulkanSetup.hpp"
+#include "renderer/Textures.hpp"
 
 static const std::unordered_map<int, glm::vec<3, int8_t>> KEY_MOVE{
     {SDL_SCANCODE_W, {0, 0, -1}},
@@ -22,75 +29,96 @@ static const std::unordered_map<int, glm::vec<3, int8_t>> KEY_MOVE{
 };
 
 App::App(bool validation) {
-    state = std::make_unique<AppState>();
     window = std::make_unique<WindowApp>(
-        Consts::WIDTH, Consts::HEIGHT, Consts::TITLE, *state
+        Consts::WIDTH, Consts::HEIGHT, Consts::TITLE
     );
     context = std::make_unique<VulkanContext>(
         rendererContextDesc(*window, validation)
     );
-    const Size2D<uint32_t> size = window->getFrameSize();
-    presenter = std::make_unique<Presenter>(
-        *context, vk::Extent2D{size.width, size.height}
-    );
-    colorFormat = presenter->colorFormat();
+    presenter = std::make_unique<Presenter>(*context, *window->getWindowPtr());
     imgui = std::make_unique<ImguiApp>(
-        *window, *context, colorFormat, presenter->frameCount()
+        *window, *context, presenter->colorFormat(), presenter->frameCount()
     );
     forwardLayout = std::make_unique<ForwardRenderLayout>(*context);
-    defaultModel =
-        ModelLoader::loadSimpleCubeModel(*context, *forwardLayout, colorFormat);
-    defaultRenderobj.reset(new RenderObject{
-        .model = defaultModel,
-        .position = {0.f, 0.f, 1.f},
-        .scale = {1.f, 1.f, 1.f},
-        .angle = 0.f,
-        .axis = {0.f, 1.f, 0.f}
-    });
-    std::vector<Ref<RenderObject>> objs{*defaultRenderobj};
-    scene = std::make_unique<Scene>(objs, *state);
-    renderApp = std::make_unique<RenderApp>(
-        *state, *context, *forwardLayout, *imgui, presenter->frameCount()
+    scene.objects.push_back(
+        {.model =
+             std::make_shared<const Model>(ModelLoader::loadSimpleCubeModel(
+                 *context, *forwardLayout, PING_PONG_COLOR_FORMAT
+             )),
+         .position = {0.f, 0.f, 1.f},
+         .scale = {1.f, 1.f, 1.f},
+         .angle = 0.f,
+         .axis = {0.f, 1.f, 0.f}}
+    );
+    renderer = std::make_unique<Renderer>(
+        *context, *forwardLayout, presenter->frameCount()
     );
 }
 
-void App::setupCallback() {
-    (*window).cleanupCallBack = [this]() {
-        this->context->device().waitIdle();
-    };
-    (*window).drawFrameCallBack = std::bind(&App::onDraw, this);
-    (*window).keyCallback = ([this](int key, int action) {
-        switch (key) {
-            case SDLK_ESCAPE: {
-                if (action) {
-                    this->state->showImGui = !this->state->showImGui;
+void App::processEvents() {
+    const auto windowId = SDL_GetWindowID(window->getWindowPtr());
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        imgui->processEvent(event);
+        switch (event.type) {
+            case SDL_EVENT_QUIT:
+                quit = true;
+                break;
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                if (event.window.windowID == windowId) {
+                    quit = true;
                 }
                 break;
-            }
-            default: {
+            case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+            case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            case SDL_EVENT_WINDOW_RESIZED:
+                if (event.window.windowID == windowId) {
+                    window->getScale();
+                }
                 break;
-            }
+            case SDL_EVENT_KEY_DOWN:
+                if (event.key.windowID == windowId &&
+                    event.key.key == SDLK_ESCAPE) {
+                    controls.showImGui = !controls.showImGui;
+                }
+                break;
+            default:
+                break;
         }
-    });
+    }
 }
 
-void App::onDraw() {
-    if (state->rotationSpeed > 1.f) {
-        auto& obj = *defaultRenderobj;
+void App::updateInput() {
+    auto* sdlWindow = window->getWindowPtr();
+    const bool grabMouse = mouseDown || !controls.showImGui;
+    if (SDL_GetWindowRelativeMouseMode(sdlWindow) != grabMouse) {
+        SDL_SetWindowRelativeMouseMode(sdlWindow, grabMouse);
+    }
+
+    glm::vec2 mouse{0.f};
+    const SDL_MouseButtonFlags buttons =
+        grabMouse ? SDL_GetRelativeMouseState(&mouse.x, &mouse.y)
+                  : SDL_GetMouseState(&mouse.x, &mouse.y);
+    mouseDown = (buttons & SDL_BUTTON_MASK(SDL_BUTTON_LEFT)) != 0;
+    if (grabMouse) {
+        mouseDelta = mouse;
+        mousePosition += mouse;
+    }
+    else {
+        mouseDelta = mouse - mousePosition;
+        mousePosition = mouse;
+    }
+}
+
+void App::onDraw(float frameTime) {
+    if (controls.rotationSpeed > 1.f && !scene.objects.empty()) {
+        auto& obj = scene.objects.front();
         float dAngle =
-            degreeToRadian(state->rotationSpeed / 1000 * state->frameTime);
+            degreeToRadian(controls.rotationSpeed / 1000 * frameTime);
         float angle = obj.angle + dAngle;
         obj.angle = std::fmod(angle, std::numbers::pi * 2);
     }
-    uint64_t timeNow = getTimestampMs();
-    state->frameTime = timeNow - state->lastRenderTimestamp;
-    state->lastRenderTimestamp = timeNow;
-    if (!state->currentScene.has_value()) {
-        return;
-    }
-    Scene& scene = (*state->currentScene);
-
-    float displacement = (state->frameTime / 1000.0) * state->moveSpeed;
+    float displacement = (frameTime / 1000.f) * controls.moveSpeed;
     for (auto& [k, v] : KEY_MOVE) {
         glm::fvec3 right = glm::cross(scene.view.front, scene.view.up);
         glm::fvec3 forward = glm::cross(right, scene.view.up);
@@ -106,18 +134,15 @@ void App::onDraw() {
         }
     }
 
-    if (!state->showImGui ||
-        (state->inputs.mouseState && !imgui->wantMouse())) {
-        glm::fvec3 move(
-            state->inputs.lastMousePos - state->inputs.mousePos, 0.f
-        );
+    if (!controls.showImGui || (mouseDown && !imgui->wantMouse())) {
+        glm::fvec3 move(-mouseDelta, 0.f);
         move.y = -move.y;  // flip y
         float moveNorm = glm::length(move);
         if (moveNorm < 40.f && moveNorm > 0.1f) {
             auto viewMatInv = glm::inverse(glm::mat3x3(scene.view.calcMat()));
             move = viewMatInv * move;
             float angle = degreeToRadian(
-                std::clamp(state->mouseSpeed * moveNorm, 0.f, 89.f)
+                std::clamp(controls.mouseSpeed * moveNorm, 0.f, 89.f)
             );
             glm::fvec3 axis = glm::cross(move, scene.view.front);
             glm::mat3x3 rMat =
@@ -132,36 +157,35 @@ void App::onDraw() {
         }
     }
 
-    if (!state->quit) {
-        const Size2D<uint32_t> size =
-            window->isMinimized()
-                ? Size2D<uint32_t>{}
-                : static_cast<Size2D<uint32_t>>(window->getFrameSize());
-        presenter->draw(
-            {
-                size.width,
-                size.height,
-            },
-            [&](const PresentFrame& frame) {
-                if (colorFormat != frame.colorFormat) {
-                    defaultModel.material.pipeline =
-                        ModelLoader::createSimpleCubePipeline(
-                            *context, *forwardLayout, frame.colorFormat
-                        );
-                    imgui->setColorFormat(frame.colorFormat);
-                    colorFormat = frame.colorFormat;
-                }
-                renderApp->recordFrame(frame);
-            }
-        );
+    auto drawData =
+        imgui->buildFrame(scene, renderSettings, controls, frameTime, quit);
+    if (quit) {
+        return;
     }
+    presenter->draw([&](const PresentFrame& frame) {
+        imgui->setColorFormat(frame.colorFormat);
+        renderer->recordFrame(frame, scene, renderSettings, drawData);
+    });
 }
 
 void App::run() {
-    setupCallback();
     std::println("{}", Consts::HELP_MSG);
     try {
-        window->run();
+        auto previousFrame = std::chrono::steady_clock::now();
+        while (!quit) {
+            processEvents();
+            if (quit) {
+                break;
+            }
+            updateInput();
+            auto now = std::chrono::steady_clock::now();
+            float frameTime =
+                std::chrono::duration<float, std::milli>(now - previousFrame)
+                    .count();
+            previousFrame = now;
+            onDraw(frameTime);
+        }
+        context->device().waitIdle();
     }
     catch (...) {
         // Drain submitted frames before the scene resources unwind.

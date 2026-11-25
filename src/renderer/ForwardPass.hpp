@@ -3,19 +3,20 @@
 
 #include <vulkan/vulkan_raii.hpp>
 
-struct AppState;
-struct FrameContext;
-struct ForwardRenderLayout;
-struct ImguiApp;
+class Buffer;
+struct RGBAColor;
+struct Scene;
 
 struct ForwardPassContext {
     vk::raii::CommandBuffer& cmd;
-    ForwardRenderLayout& layout;
-    FrameContext& frame;
+    const vk::raii::PipelineLayout& pipelineLayout;
     vk::ImageView colorView;
+    vk::ImageView depthView;
     vk::Extent2D extent;
-    AppState& state;
-    ImguiApp& imgui;
+    vk::DescriptorSet sceneSet;
+    Buffer& sceneUniform;
+    const Scene& scene;
+    const RGBAColor& clearColor;
 };
 
 struct ForwardPass {

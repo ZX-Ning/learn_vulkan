@@ -1,9 +1,6 @@
 #include "Scene.hpp"
 
-#include "../AppState.hpp"
-#include "../core/Buffer.hpp"
-#include "ForwardShaderData.hpp"
-#include "Model.hpp"
+#include "../utils.hpp"
 
 glm::fmat4x4 RenderObject::calcModelMatrix() const {
     glm::mat4 t = glm::translate(glm::mat4(1.0f), position);
@@ -13,42 +10,8 @@ glm::fmat4x4 RenderObject::calcModelMatrix() const {
     return t * r * s;
 }
 
-void RenderObject::render(
-    const vk::raii::PipelineLayout& pipelineLayout,
-    vk::raii::CommandBuffer& cmd
-) const {
-    model.bind(pipelineLayout, cmd);
-    DefaultPushConstant pc{glm::transpose(calcModelMatrix())};
-    cmd.pushConstants(
-        pipelineLayout,
-        vk::ShaderStageFlagBits::eAllGraphics,
-        0,
-        vk::ArrayProxy<const DefaultPushConstant>{1, &pc}
-    );
-    model.render(cmd);
-}
-
-Scene::Scene(std::vector<Ref<RenderObject>>& objs, AppState& state) : state(state) {
-    this->objects = objs;
+Scene::Scene() {
     resetCamera();
-    state.currentScene = *this;
-}
-
-void Scene::render(
-    const vk::raii::PipelineLayout& pipelineLayout,
-    vk::raii::CommandBuffer& cmd,
-    Buffer& ub,
-    float ratio
-) {
-    camera.aspectRatio = ratio;
-    DefaultSceneUBO ubo{
-        glm::transpose(view.calcMat()),
-        glm::transpose(camera.calcMat())
-    };
-    ub.write(objectAsRawBytes(ubo));
-    for (const RenderObject& obj : objects) {
-        obj.render(pipelineLayout, cmd);
-    }
 }
 
 void Scene::resetCamera() {

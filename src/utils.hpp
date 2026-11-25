@@ -75,7 +75,7 @@ struct RGBAColor : public std::array<float, 4> {
         }
     }
 
-    RGBAColor srgbToLinear() {
+    RGBAColor srgbToLinear() const {
         return {
             srgbToLinear((*this)[0]),
             srgbToLinear((*this)[1]),

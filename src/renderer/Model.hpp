@@ -25,8 +25,8 @@ struct Model {
     // Default move and copy cause it's just holding a bunch of smart pointers
     Mesh mesh;
     Material material;
-    void bind(const vk::raii::PipelineLayout&, vk::raii::CommandBuffer&);
-    void render(vk::raii::CommandBuffer&);
+    void bind(const vk::raii::PipelineLayout&, vk::raii::CommandBuffer&) const;
+    void render(vk::raii::CommandBuffer&) const;
 };
 
 #endif  // MODEL_HPP

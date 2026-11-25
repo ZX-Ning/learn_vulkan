@@ -10,13 +10,11 @@
 #include "utils.hpp"
 
 struct WindowApp;
-struct AppState;
+struct AppControls;
 class VulkanContext;
+struct RenderSettings;
 struct Scene;
-struct SDL_Window;
-namespace vk::raii {
-class CommandBuffer;
-}
+union SDL_Event;
 
 struct ImguiApp {
     ImguiApp(
@@ -25,22 +23,31 @@ struct ImguiApp {
         vk::Format colorFormat,
         uint32_t frameCount
     );
+    void processEvent(const SDL_Event& event);
+    void setColorFormat(vk::Format colorFormat);
+    ImDrawData* buildFrame(
+        Scene& scene,
+        RenderSettings& settings,
+        AppControls& controls,
+        float frameTime,
+        bool& quit
+    );
+    bool wantMouse();
+    ~ImguiApp();
+    DISABLE_COPY(ImguiApp)
+
+private:
     void initForSdl(WindowApp& windowApp);
-    static constexpr int FPS_UPDATE_INTERVAL_MS = 200;
-    uint64_t lastShowFpsTime;
-    float lastframeTime;
     void initImguiForVk(
         WindowApp& windowApp,
         const VulkanContext& context,
         vk::Format format,
         uint32_t frameCount
     );
-    void setColorFormat(vk::Format colorFormat);
-    ImDrawData* drawImgui(AppState& state);
-    bool wantMouse();
-    void renderVk(ImDrawData* drawData, vk::raii::CommandBuffer& cmd);
-    ~ImguiApp();
-    DISABLE_COPY(ImguiApp)
+    static constexpr uint64_t FPS_UPDATE_INTERVAL_MS = 200;
+    uint64_t lastShowFpsTime = 0;
+    float lastFrameTime = 0.f;
+    vk::Format colorFormat_ = vk::Format::eUndefined;
 };
 
 #endif  // IMGUI_HPP

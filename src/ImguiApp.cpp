@@ -4,20 +4,21 @@
 #include <backends/imgui_impl_vulkan.h>
 
 #include <algorithm>
+#include <glm/gtc/type_ptr.hpp>
 #include <vulkan/vulkan_raii.hpp>
 
-#include "AppState.hpp"
+#include "AppControls.hpp"
 #include "Consts.hpp"
-#include "renderer/Scene.hpp"
 #include "WindowApp.hpp"
 #include "core/VulkanContext.hpp"
+#include "renderer/RenderSettings.hpp"
+#include "renderer/Scene.hpp"
 
 namespace {
 ImGui_ImplVulkan_PipelineInfo pipelineInfo(const vk::Format& format) {
     const vk::PipelineRenderingCreateInfo rendering{
         .colorAttachmentCount = 1,
         .pColorAttachmentFormats = &format,
-        .depthAttachmentFormat = vk::Format::eD32Sfloat
     };
     ImGui_ImplVulkan_PipelineInfo info{};
     info.PipelineRenderingCreateInfo = *rendering;
@@ -102,9 +103,16 @@ void ImguiApp::initImguiForVk(
     );
 
     ImGui_ImplVulkan_Init(&initInfo);
+    colorFormat_ = format;
 }
 
-ImDrawData* ImguiApp::drawImgui(AppState& state) {
+ImDrawData* ImguiApp::buildFrame(
+    Scene& scene,
+    RenderSettings& settings,
+    AppControls& controls,
+    float frameTime,
+    bool& quit
+) {
     ImGui_ImplSDL3_NewFrame();
     ImGui_ImplVulkan_NewFrame();
     ImGui::NewFrame();
@@ -132,78 +140,49 @@ ImDrawData* ImguiApp::drawImgui(AppState& state) {
     // auto size = ImGui::GetMainViewport()->Size;
     // std::println("Imgui scale: {}x{}", imguiScale.x, imguiScale.y);
     // ImGui::SetNextWindowSize(ImVec2(size.x * 0.75, size.y * 0.15), ImGuiCond_Appearing);
-    if (state.showImGui) {
+    if (controls.showImGui) {
         ImGui::Begin("Hello, world!");
         ImGui::ColorEdit3(
             "clear color",
-            state.clearColor.getRaw()
+            settings.clearColor.getRaw()
         );
-        // ImGui::SameLine();
-        // ImGui::Checkbox("Demo Window", &state.showDemoWindow);
-        if (state.currentScene.has_value()) {
-            Scene& scene = *state.currentScene;
-            ImGui::DragFloat(
-                "Move Speed (1/s)",
-                reinterpret_cast<float*>(&state.moveSpeed),
-                0.01f,
-                0.f,
-                20.f,
-                "%.2f"
-            );
-            ImGui::DragFloat(
-                "Mouse (deg/px)",
-                reinterpret_cast<float*>(&state.mouseSpeed),
-                0.002f,
-                0.f,
-                1.f,
-                "%.5f"
-            );
-            View view = (*state.currentScene).get().view;
-            ImGui::Text("View Front: %.1f, %.1f, %.1f", view.front[0], view.front[1], view.front[2]);
-            ImGui::Text("View Up: %.1f, %.1f, %.1f", view.up[0], view.up[1], view.up[2]);
+        ImGui::SliderFloat(
+            "Gamma", &settings.gamma, 0.1f, 4.f, "%.2f", ImGuiSliderFlags_AlwaysClamp
+        );
+        ImGui::DragFloat(
+            "Move Speed (1/s)", &controls.moveSpeed, 0.01f, 0.f, 20.f, "%.2f"
+        );
+        ImGui::DragFloat(
+            "Mouse (deg/px)", &controls.mouseSpeed, 0.002f, 0.f, 1.f, "%.5f"
+        );
+        const auto& view = scene.view;
+        ImGui::Text("View Front: %.1f, %.1f, %.1f", view.front.x, view.front.y, view.front.z);
+        ImGui::Text("View Up: %.1f, %.1f, %.1f", view.up.x, view.up.y, view.up.z);
 
-            float degreeFov = radianToDegree(scene.camera.fovy);
-            ImGui::DragFloat(
-                "Fov",
-                &degreeFov,
-                0.05f,
-                -360.f,
-                360.f,
-                "%.1f"
-            );
-            ImGui::DragFloat(
-                "Rotate Speed",
-                &state.rotationSpeed,
-                1.f,
-                0.f,
-                720.f,
-                "%.2f"
-            );
+        float degreeFov = radianToDegree(scene.camera.fovy);
+        if (ImGui::DragFloat("Fov", &degreeFov, 0.05f, -360.f, 360.f, "%.1f")) {
             scene.camera.fovy = degreeToRadian(degreeFov);
+        }
+        ImGui::DragFloat(
+            "Rotate Speed", &controls.rotationSpeed, 1.f, 0.f, 720.f, "%.2f"
+        );
+        ImGui::InputFloat3("Coord", glm::value_ptr(scene.view.eye), "%.2f");
+        if (ImGui::Button("Reset Camera")) {
+            scene.resetCamera();
+        }
 
-            auto& eye = scene.view.eye;
-            ImGui::InputFloat3(
-                "Coord",
-                reinterpret_cast<float*>(&eye),
-                "%.2f"
-            );
-            if (ImGui::Button("Reset Camera")) {
-                scene.resetCamera();
-            }
+        const auto now = getTimestampMs();
+        if (now - lastShowFpsTime >= FPS_UPDATE_INTERVAL_MS) {
+            lastFrameTime = frameTime;
+            lastShowFpsTime = now;
         }
-        if (getTimestampMs() - lastShowFpsTime > (float)FPS_UPDATE_INTERVAL_MS) {
-            lastframeTime = state.frameTime;
-            lastShowFpsTime = getTimestampMs();
-        }
-        ImGui::Text("Frame time: %.2f ms (%.0f fps)", lastframeTime, 1000.f / lastframeTime);
+        float fps = lastFrameTime > 0.f ? 1000.f / lastFrameTime : 0.f;
+        ImGui::Text("Frame time: %.2f ms (%.0f fps)", lastFrameTime, fps);
         if (ImGui::Button("Quit")) {
-            state.quit = true;
+            quit = true;
         }
         ImGui::End();
     }
-    // if (state.showDemoWindow) {
-    //     ImGui::ShowDemoWindow(&(state.showDemoWindow));
-    // }
     ImGui::Render();
     return ImGui::GetDrawData();
 }
@@ -212,9 +191,8 @@ bool ImguiApp::wantMouse() {
     return ImGui::GetIO().WantCaptureMouse;
 }
 
-void ImguiApp::renderVk(ImDrawData* drawData, vk::raii::CommandBuffer& cmd) {
-    ImGui_ImplVulkan_RenderDrawData(drawData, *cmd);
-    ;
+void ImguiApp::processEvent(const SDL_Event& event) {
+    ImGui_ImplSDL3_ProcessEvent(&event);
 }
 
 ImguiApp::ImguiApp(
@@ -228,8 +206,12 @@ ImguiApp::ImguiApp(
 }
 
 void ImguiApp::setColorFormat(vk::Format colorFormat) {
+    if (colorFormat == colorFormat_) {
+        return;
+    }
     auto info = pipelineInfo(colorFormat);
     ImGui_ImplVulkan_CreateMainPipeline(&info);
+    colorFormat_ = colorFormat;
 }
 
 void ImguiApp::initForSdl(WindowApp& windowApp) {
@@ -237,9 +219,6 @@ void ImguiApp::initForSdl(WindowApp& windowApp) {
     if (!ImGui_ImplSDL3_InitForVulkan(windowApp.getWindowPtr())) {
         throw std::runtime_error("Failed to init IMGUI for SDL3");
     }
-    windowApp.eventCallback = [](const SDL_Event& event) {
-        ImGui_ImplSDL3_ProcessEvent(&event);
-    };
 }
 
 ImguiApp::~ImguiApp() {

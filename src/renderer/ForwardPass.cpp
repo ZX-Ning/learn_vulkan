@@ -1,10 +1,9 @@
 #include "ForwardPass.hpp"
 
-#include "../AppState.hpp"
-#include "../ImguiApp.hpp"
-#include "../core/Texture.hpp"
-#include "ForwardRenderLayout.hpp"
-#include "FrameContext.hpp"
+#include "../core/Buffer.hpp"
+#include "../utils.hpp"
+#include "ForwardShaderData.hpp"
+#include "Model.hpp"
 #include "Scene.hpp"
 
 namespace {
@@ -19,16 +18,22 @@ vk::Viewport makeViewport(vk::Extent2D extent) {
 
 void ForwardPass::record(const ForwardPassContext& ctx) {
     auto& cmd = ctx.cmd;
-    ctx.frame.transitionDepthToAttachment(cmd);
+    const float aspectRatio = static_cast<float>(ctx.extent.width) / ctx.extent.height;
+    const DefaultSceneUBO ubo{
+        glm::transpose(ctx.scene.view.calcMat()),
+        glm::transpose(ctx.scene.camera.calcMat(aspectRatio)),
+    };
+    ctx.sceneUniform.write(objectAsRawBytes(ubo));
+
     vk::RenderingAttachmentInfo colorAttachmentInfo{
         .imageView = ctx.colorView,
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
         .loadOp = vk::AttachmentLoadOp::eClear,
         .storeOp = vk::AttachmentStoreOp::eStore,
-        .clearValue = {.color = {ctx.state.clearColor.srgbToLinear()}}
+        .clearValue = {.color = {ctx.clearColor.srgbToLinear()}}
     };
     vk::RenderingAttachmentInfo depthAttachmentInfo{
-        .imageView = ctx.frame.depthTexture->view(),
+        .imageView = ctx.depthView,
         .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
         .loadOp = vk::AttachmentLoadOp::eClear,
         .storeOp = vk::AttachmentStoreOp::eDontCare,
@@ -46,22 +51,20 @@ void ForwardPass::record(const ForwardPassContext& ctx) {
     cmd.setViewport(0, makeViewport(ctx.extent));
     cmd.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), ctx.extent));
 
-    if (ctx.state.currentScene.has_value()) {
-        cmd.bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics,
-            ctx.layout.pipelineLayout,
-            0,
-            *ctx.frame.sceneDescriptorSet,
-            nullptr
+    cmd.bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics,
+        ctx.pipelineLayout,
+        0,
+        ctx.sceneSet,
+        {}
+    );
+    for (const auto& object : ctx.scene.objects) {
+        object.model->bind(ctx.pipelineLayout, cmd);
+        const DefaultPushConstant pushConstant{glm::transpose(object.calcModelMatrix())};
+        cmd.pushConstants<DefaultPushConstant>(
+            ctx.pipelineLayout, vk::ShaderStageFlagBits::eAllGraphics, 0, pushConstant
         );
-        Scene& scene = *ctx.state.currentScene;
-        scene.render(
-            ctx.layout.pipelineLayout,
-            cmd,
-            *ctx.frame.sceneUniformBuf,
-            static_cast<float>(ctx.extent.width) / ctx.extent.height
-        );
+        object.model->render(cmd);
     }
-    ctx.imgui.renderVk(ctx.imgui.drawImgui(ctx.state), cmd);
     cmd.endRendering();
 }

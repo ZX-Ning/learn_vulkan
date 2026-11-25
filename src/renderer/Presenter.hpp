@@ -8,6 +8,7 @@
 #include <vulkan/vulkan_raii.hpp>
 
 class VulkanContext;
+struct SDL_Window;
 struct SwapChain;
 
 struct PresentFrame {
@@ -18,13 +19,13 @@ struct PresentFrame {
     vk::Format colorFormat;
 };
 
-// Presents on the context's graphics queue. The context must outlive this
-// object, and the caller must drain its queue before destroying the presenter.
+// Presents to the SDL window for which the context's surface was created.
+// Both must outlive the presenter. Drain the queue before destroying it.
 class Presenter {
 public:
     Presenter(
         const VulkanContext& context,
-        vk::Extent2D drawableExtent,
+        SDL_Window& window,
         uint32_t framesInFlight = 2
     );
     ~Presenter();
@@ -34,16 +35,13 @@ public:
     uint32_t frameCount() const noexcept;
     vk::Format colorFormat() const noexcept;
 
-    // A zero extent skips recording. The callback runs after the frame slot is
+    // Call on the SDL main thread. The callback runs after the frame slot is
     // idle, with the swapchain image ready to use as a color attachment. Its
     // contents are discarded at the start of each frame. End any rendering
     // scope before returning and leave the swapchain image in attachment
     // layout. Keep resources used by the callback alive until their frame slot
     // is idle. Queue and command-pool access must be externally synchronized.
-    void draw(
-        vk::Extent2D drawableExtent,
-        const std::function<void(const PresentFrame&)>& record
-    );
+    void draw(const std::function<void(const PresentFrame&)>& record);
 
 private:
     struct FrameSlot {
@@ -55,6 +53,7 @@ private:
     void recreate(vk::Extent2D drawableExtent);
 
     const VulkanContext& context_;
+    SDL_Window& window_;
     std::unique_ptr<SwapChain> swapChain_;
     std::vector<FrameSlot> frames_;
     std::vector<vk::raii::Semaphore> renderFinished_;
