@@ -8,7 +8,9 @@ else
     add_requires("libsdl3", {system = false})
 end
 
-add_requires("glm", "vulkan-hpp", "vulkan-memory-allocator")
+add_requires("glm", "vulkan-hpp", "vulkan-memory-allocator", "fastgltf")
+
+option("tests", {default = false, showmenu = true, description = "Enable local integration test targets"})
 
 includes("third_party/")
 
@@ -16,7 +18,9 @@ target("learn_vulkan", function()
     set_kind("binary")
     set_languages("c17", "c++23")
     add_files("src/**.cpp")
-    add_packages("libsdl3", "glm", "vulkan-hpp", "vulkan-memory-allocator")
+    add_packages("libsdl3", "glm", "vulkan-hpp", "vulkan-memory-allocator", "fastgltf")
+    -- fastgltf's static Base64 code uses the bundled simdutf library.
+    add_linkorders("fastgltf", "fastgltf_simdutf")
     add_deps("imgui_vulkan_sdl3", "stb")
 
     add_defines("VK_NO_PROTOTYPES")
@@ -29,3 +33,7 @@ target("learn_vulkan", function()
         if (is_plat("mingw")) then target:add("links", "stdc++exp") end
     end)
 end)
+
+if has_config("tests") and os.isfile(path.join(os.scriptdir(), "test", "xmake.lua")) then
+    includes("test")
+end

@@ -1,6 +1,7 @@
 #ifndef APP_HPP
 #define APP_HPP
 
+#include <filesystem>
 #include <memory>
 
 #include "AppControls.hpp"
@@ -35,7 +36,7 @@ private:
     void onDraw(float frameTime);
 
 public:
-    explicit App(bool validation = !IS_RELEASE);
+    explicit App(bool validation = !IS_RELEASE, const std::filesystem::path& modelPath = {});
     void run();
 };
 

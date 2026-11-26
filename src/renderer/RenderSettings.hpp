@@ -4,7 +4,7 @@
 #include "../utils.hpp"
 
 struct RenderSettings {
-    RGBAColor clearColor{0.45f, 0.53f, 0.65f, 1.f};
+    RGBAColor clearColor{0.12, 0.09, 0.22, 1.f};
     float gamma{1.f};
 };
 

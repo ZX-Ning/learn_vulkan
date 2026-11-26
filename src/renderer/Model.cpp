@@ -1,12 +1,6 @@
 #include "Model.hpp"
 
-#include "../core/RenderPipeline.hpp"
-
-void Model::bind(const vk::raii::PipelineLayout& layout, vk::raii::CommandBuffer& cmd) const {
-    cmd.bindPipeline(
-        vk::PipelineBindPoint::eGraphics,
-        **material.pipeline
-    );
+void ModelPrimitive::bind(const vk::raii::PipelineLayout& layout, vk::raii::CommandBuffer& cmd) const {
     if (material.descriptorSet != nullptr) {
         cmd.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
@@ -28,6 +22,6 @@ void Model::bind(const vk::raii::PipelineLayout& layout, vk::raii::CommandBuffer
     );
 }
 
-void Model::render(vk::raii::CommandBuffer& cmd) const {
+void ModelPrimitive::render(vk::raii::CommandBuffer& cmd) const {
     cmd.drawIndexed(mesh.indexCount, 1, 0, 0, 0);
 }

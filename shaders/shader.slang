@@ -2,12 +2,14 @@ struct VertexInput {
     float3 pos;
     float4 color;
     float2 uv;
+    float3 normal;
 };
 
 struct VertexOutput {
     float4 pos : SV_Position;
     float4 color;
     float2 uv;
+    float3 normal;
 };
 
 struct PC {
@@ -32,16 +34,15 @@ Sampler2D sampledTexture;
 VertexOutput vertMain(VertexInput vIn) {
     VertexOutput vOut;
     vOut.pos = mul(ubo.projection, (mul(ubo.view, mul(pc.model, float4(vIn.pos, 1.f)))));
-    // vOut.pos = float4(vIn.pos, 1.f);
     vOut.color = vIn.color;
     vOut.uv = vIn.uv;
+    vOut.normal = vIn.normal;
     return vOut;
 }
 
 [shader("fragment")]
 float4 fragMain(VertexOutput fIn) : SV_Target {
-    return sampledTexture.Sample(fIn.uv);
-    // return float4(1.f, 0.f, 0.f, 0.5f);
+    return sampledTexture.Sample(fIn.uv) * fIn.color;
 }
 
 

@@ -43,11 +43,7 @@ void ImguiApp::initImguiForVk(
     fontcfg.PixelSnapH = true;
     fontcfg.PixelSnapV = true;
     fontcfg.RasterizerDensity = 0.86f;
-    imguiIo->Fonts->AddFontFromFileTTF(
-        Consts::FONT,
-        16.f,
-        &fontcfg
-    );
+    imguiIo->Fonts->AddFontFromFileTTF(Consts::FONT, 16.f, &fontcfg);
     ImGuiStyle* style = &ImGui::GetStyle();
 
     // set style
@@ -93,13 +89,13 @@ void ImguiApp::initImguiForVk(
     ImGui_ImplVulkan_LoadFunctions(
         VK_API_VERSION_1_3,
         [](const char* name, void* data) {
-            auto instance =
-                reinterpret_cast<const vk::raii::Instance*>(data);
-            return instance
-                ->getDispatcher()
-                ->vkGetInstanceProcAddr(**instance, name);
+            auto instance = reinterpret_cast<const vk::raii::Instance*>(data);
+            return instance->getDispatcher()->vkGetInstanceProcAddr(
+                **instance, name
+            );
         },
-        (void*)(&context.instance())  // using c-style cast for const + reinterpret cast
+        (void*)(&context.instance())  // using c-style cast for const +
+                                      // reinterpret cast
     );
 
     ImGui_ImplVulkan_Init(&initInfo);
@@ -121,10 +117,8 @@ ImDrawData* ImguiApp::buildFrame(
     ImGui::SetNextWindowPos(viewport->Pos);
     ImGui::SetNextWindowSize(viewport->Size);
     ImGuiWindowFlags window_flags =
-        ImGuiWindowFlags_NoDecoration |
-        ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoBackground |
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
         ImGuiWindowFlags_NoInputs;
     {
         ImGui::Begin("##Fullscreen", nullptr, window_flags);
@@ -139,15 +133,18 @@ ImDrawData* ImguiApp::buildFrame(
     // auto imguiScale = ImGui::GetIO().DisplayFramebufferScale;
     // auto size = ImGui::GetMainViewport()->Size;
     // std::println("Imgui scale: {}x{}", imguiScale.x, imguiScale.y);
-    // ImGui::SetNextWindowSize(ImVec2(size.x * 0.75, size.y * 0.15), ImGuiCond_Appearing);
+    // ImGui::SetNextWindowSize(ImVec2(size.x * 0.75, size.y * 0.15),
+    // ImGuiCond_Appearing);
     if (controls.showImGui) {
         ImGui::Begin("Hello, world!");
-        ImGui::ColorEdit3(
-            "clear color",
-            settings.clearColor.getRaw()
-        );
+        ImGui::ColorEdit3("clear color", settings.clearColor.getRaw());
         ImGui::SliderFloat(
-            "Gamma", &settings.gamma, 0.1f, 4.f, "%.2f", ImGuiSliderFlags_AlwaysClamp
+            "Gamma",
+            &settings.gamma,
+            0.1f,
+            4.f,
+            "%.2f",
+            ImGuiSliderFlags_AlwaysClamp
         );
         ImGui::DragFloat(
             "Move Speed (1/s)", &controls.moveSpeed, 0.01f, 0.f, 20.f, "%.2f"
@@ -156,8 +153,15 @@ ImDrawData* ImguiApp::buildFrame(
             "Mouse (deg/px)", &controls.mouseSpeed, 0.002f, 0.f, 1.f, "%.5f"
         );
         const auto& view = scene.view;
-        ImGui::Text("View Front: %.1f, %.1f, %.1f", view.front.x, view.front.y, view.front.z);
-        ImGui::Text("View Up: %.1f, %.1f, %.1f", view.up.x, view.up.y, view.up.z);
+        ImGui::Text(
+            "View Front: %.1f, %.1f, %.1f",
+            view.front.x,
+            view.front.y,
+            view.front.z
+        );
+        ImGui::Text(
+            "View Up: %.1f, %.1f, %.1f", view.up.x, view.up.y, view.up.z
+        );
 
         float degreeFov = radianToDegree(scene.camera.fovy);
         if (ImGui::DragFloat("Fov", &degreeFov, 0.05f, -360.f, 360.f, "%.1f")) {
@@ -166,6 +170,16 @@ ImDrawData* ImguiApp::buildFrame(
         ImGui::DragFloat(
             "Rotate Speed", &controls.rotationSpeed, 1.f, 0.f, 720.f, "%.2f"
         );
+        if (!scene.objects.empty()) {
+            ImGui::SliderFloat(
+                "Model Scale",
+                &scene.objects.front().uniformScale,
+                0.01f,
+                100.f,
+                "%.3fx",
+                ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp
+            );
+        }
         ImGui::InputFloat3("Coord", glm::value_ptr(scene.view.eye), "%.2f");
         if (ImGui::Button("Reset Camera")) {
             scene.resetCamera();

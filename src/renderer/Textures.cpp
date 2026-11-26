@@ -60,7 +60,7 @@ std::unique_ptr<Texture> createDepthTexture(
     return std::make_unique<Texture>(texture(
         ctx,
         extent,
-        vk::Format::eD32Sfloat,
+        SCENE_DEPTH_FORMAT,
         vk::ImageUsageFlagBits::eDepthStencilAttachment,
         vk::ImageAspectFlagBits::eDepth,
         false

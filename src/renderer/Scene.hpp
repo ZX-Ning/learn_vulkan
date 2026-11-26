@@ -12,6 +12,7 @@ struct RenderObject {
     std::shared_ptr<const Model> model;
     glm::fvec3 position;
     glm::fvec3 scale;
+    float uniformScale{4.f};
     // rotation
     float angle;
     glm::vec3 axis;

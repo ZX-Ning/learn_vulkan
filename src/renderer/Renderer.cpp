@@ -14,6 +14,7 @@ Renderer::Renderer(
     : context_(context),
       layout_(layout),
       frameCount_(frameCount),
+      forwardPass_(context.device(), layout.pipelineLayout),
       postProcessPass_(context.device()) {}
 
 void Renderer::recordFrame(
@@ -64,7 +65,6 @@ void Renderer::recordFrame(
     resources.transitionDepthToAttachment(frame.cmd);
     forwardPass_.record({
         .cmd = frame.cmd,
-        .pipelineLayout = layout_.pipelineLayout,
         .colorView = *sceneColor.view(),
         .depthView = *resources.depthTexture->view(),
         .extent = frame.extent,

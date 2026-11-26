@@ -3,5 +3,7 @@
 #include "core/VulkanContext.hpp"
 #include "utils.hpp"
 struct WindowApp;
-ContextDesc rendererContextDesc(WindowApp& window, bool validation = !IS_RELEASE);
+ContextDesc rendererContextDesc(
+    WindowApp& window, bool validation = !IS_RELEASE
+);
 #endif

@@ -15,9 +15,8 @@
 #include <unordered_map>
 
 #include "Consts.hpp"
-#include "ModelLoader.hpp"
+#include "assets/ModelLoader.hpp"
 #include "VulkanSetup.hpp"
-#include "renderer/Textures.hpp"
 
 static const std::unordered_map<int, glm::vec<3, int8_t>> KEY_MOVE{
     {SDL_SCANCODE_W, {0, 0, -1}},
@@ -28,7 +27,7 @@ static const std::unordered_map<int, glm::vec<3, int8_t>> KEY_MOVE{
     {SDL_SCANCODE_LSHIFT, {0, -1, 0}}
 };
 
-App::App(bool validation) {
+App::App(bool validation, const std::filesystem::path& modelPath) {
     window = std::make_unique<WindowApp>(
         Consts::WIDTH, Consts::HEIGHT, Consts::TITLE
     );
@@ -40,11 +39,12 @@ App::App(bool validation) {
         *window, *context, presenter->colorFormat(), presenter->frameCount()
     );
     forwardLayout = std::make_unique<ForwardRenderLayout>(*context);
+    const auto materialSetLayout = *forwardLayout->materialSetLayout;
+    auto model = modelPath.empty()
+        ? ModelLoader::loadSimpleCubeModel(*context, materialSetLayout)
+        : ModelLoader::loadGltfModel(*context, materialSetLayout, modelPath);
     scene.objects.push_back(
-        {.model =
-             std::make_shared<const Model>(ModelLoader::loadSimpleCubeModel(
-                 *context, *forwardLayout, PING_PONG_COLOR_FORMAT
-             )),
+        {.model = std::make_shared<const Model>(std::move(model)),
          .position = {0.f, 0.f, 1.f},
          .scale = {1.f, 1.f, 1.f},
          .angle = 0.f,

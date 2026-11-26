@@ -206,6 +206,11 @@ VulkanContext::VulkanContext(const ContextDesc& desc) {
     if (vmaCreateAllocator(&allocatorInfo, allocator_.get()) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create VMA allocator");
     }
+    std::println(
+        "[Vulkan] device={} | validation={}",
+        capabilities_.properties.deviceName.data(),
+        desc.validation ? "enabled" : "disabled"
+    );
 }
 
 void VulkanContext::submitAndWait(

@@ -1,12 +1,17 @@
 #include "ImageLoader.hpp"
 
+#include <limits>
 #include <stdexcept>
 
 const Image Image::readImage(std::span<const uint8_t> imgFileData) {
+    if (imgFileData.empty() ||
+        imgFileData.size() > std::numeric_limits<int>::max()) {
+        throw std::runtime_error("Unsupported image file size");
+    }
     Image image;
     uint8_t* data = stbi_load_from_memory(
         imgFileData.data(),
-        imgFileData.size_bytes(),
+        static_cast<int>(imgFileData.size()),
         &image.width,
         &image.height,
         &image.channels,
@@ -21,5 +26,5 @@ const Image Image::readImage(std::span<const uint8_t> imgFileData) {
 }
 
 std::span<const uint8_t> Image::rawData() const {
-    return std::span<const uint8_t>(data.get(), width * height * channels);
+    return {data.get(), static_cast<std::size_t>(width) * height * channels};
 }
