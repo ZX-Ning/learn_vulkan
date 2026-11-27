@@ -2,6 +2,7 @@
 #define VULKANCONTEXT_HPP
 #include <functional>
 
+#include "Buffer.hpp"
 #include "DeviceConfig.hpp"
 #include "VulkanUtils.hpp"
 
@@ -62,6 +63,10 @@ public:
     const DevicePlan& enabledDevice() const noexcept {
         return *plan_;
     }
+
+    // The context must outlive the returned buffer.
+    [[nodiscard]] Buffer createBuffer(const BufferDesc& desc) const;
+
     // Referenced GPU resources survive until return. Queue/pool access must be
     // externally synchronized. A recording exception occurs before submission.
     void submitAndWait(

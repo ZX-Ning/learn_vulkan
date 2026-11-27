@@ -18,11 +18,13 @@ FrameContext::FrameContext(
 )
     : sceneDescriptorSet(std::move(sceneSet)),
       postSourceSet(std::move(postSet)) {
-    sceneUniformBuf = std::make_shared<Buffer>(ctx.allocator(), BufferDesc{
-        .size = sizeof(DefaultSceneUBO),
-        .usage = vk::BufferUsageFlagBits::eUniformBuffer,
-        .memory = MemoryAccess::Upload
-    });
+    sceneUniformBuf = std::make_shared<Buffer>(
+        ctx.createBuffer({
+            .size = sizeof(DefaultSceneUBO),
+            .usage = vk::BufferUsageFlagBits::eUniformBuffer,
+            .memory = MemoryAccess::Upload,
+        })
+    );
     recreateTextures(ctx, extent);
 
     vk::DescriptorBufferInfo bufferInfo{

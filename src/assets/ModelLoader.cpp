@@ -22,20 +22,18 @@ Mesh uploadMesh(
     const std::vector<uint32_t>& indices
 ) {
     auto vertBuf = std::make_shared<Buffer>(
-        context.allocator(),
-        BufferDesc{
+        context.createBuffer({
             .size = getVectorSize(vertices),
             .usage = vk::BufferUsageFlagBits::eVertexBuffer |
                      vk::BufferUsageFlagBits::eTransferDst
-        }
+        })
     );
     auto indexBuf = std::make_shared<Buffer>(
-        context.allocator(),
-        BufferDesc{
+        context.createBuffer({
             .size = getVectorSize(indices),
             .usage = vk::BufferUsageFlagBits::eIndexBuffer |
                      vk::BufferUsageFlagBits::eTransferDst
-        }
+        })
     );
     uploads.upload(cmd, *vertBuf, asRawBytes(vertices));
     uploads.upload(cmd, *indexBuf, asRawBytes(indices));

@@ -16,6 +16,7 @@ includes("third_party/")
 
 target("learn_vulkan", function()
     set_kind("binary")
+    set_rundir(os.projectdir())
     set_languages("c17", "c++23")
     add_files("src/**.cpp")
     add_packages("libsdl3", "glm", "vulkan-hpp", "vulkan-memory-allocator", "fastgltf")

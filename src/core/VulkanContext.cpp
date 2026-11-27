@@ -213,6 +213,10 @@ VulkanContext::VulkanContext(const ContextDesc& desc) {
     );
 }
 
+Buffer VulkanContext::createBuffer(const BufferDesc& desc) const {
+    return Buffer(allocator(), desc);
+}
+
 void VulkanContext::submitAndWait(
     const std::function<void(vk::raii::CommandBuffer&)>& record
 ) const {

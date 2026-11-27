@@ -124,12 +124,11 @@ void readBufferSync(
     if (data.empty()) {
         return;
     }
-    Buffer staging(
-        ctx.allocator(),
-        {std::min(chunkSize, data.size_bytes()),
-         vk::BufferUsageFlagBits::eTransferDst,
-         MemoryAccess::Readback}
-    );
+    const auto staging = ctx.createBuffer({
+        .size = std::min(chunkSize, data.size_bytes()),
+        .usage = vk::BufferUsageFlagBits::eTransferDst,
+        .memory = MemoryAccess::Readback,
+    });
     for (size_t done = 0; done < data.size_bytes();) {
         auto count = std::min(chunkSize, data.size_bytes() - done);
         ctx.submitAndWait([&](vk::raii::CommandBuffer& cmd) {
